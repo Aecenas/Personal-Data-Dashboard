@@ -1,0 +1,5 @@
+{
+  "name": "MyMetrics",
+  "description": "A personal data dashboard decoupling UI from local Python script logic. Built for Cross-platform use.",
+  "requestFramePermissions": []
+}
