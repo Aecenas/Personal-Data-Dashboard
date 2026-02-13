@@ -1,12 +1,18 @@
 import { create } from 'zustand';
 import { Card, CardRuntimeData, AppSettings, ViewMode } from './types';
-import { INITIAL_MOCK_CARDS } from './services/mockData';
 import { storageService } from './services/storage';
 import { executionService } from './services/execution';
 
 const GRID_COLUMNS = 4;
+const LEGACY_SAMPLE_IDS = new Set(['1', '2', '3', '4']);
+const LEGACY_SAMPLE_TITLES = new Set(['Server CPU', 'RAM Usage', 'Traffic Trend', 'Weather Status']);
 
 const inFlightCardIds = new Set<string>();
+
+const isLegacySampleCard = (card: Card) => {
+  const path = card.script_config.path.trim();
+  return LEGACY_SAMPLE_IDS.has(card.id) && LEGACY_SAMPLE_TITLES.has(card.title) && path.startsWith('/path/to/');
+};
 
 const getCardSize = (size: Card['ui_config']['size']) => ({
   w: size.startsWith('2') ? 2 : 1,
@@ -219,7 +225,8 @@ export const useStore = create<AppState>((set, get) => ({
     const persisted = await storageService.load();
 
     if (persisted) {
-      const hydratedCards = recalcSortOrder(persisted.cards.map(hydrateRuntimeData));
+      const cleanedCards = persisted.cards.filter((card) => !isLegacySampleCard(card));
+      const hydratedCards = recalcSortOrder(cleanedCards.map(hydrateRuntimeData));
       set({
         theme: persisted.theme,
         cards: hydratedCards,
@@ -228,10 +235,17 @@ export const useStore = create<AppState>((set, get) => ({
         dataPath: currentPath,
         isInitialized: true,
       });
+
+      if (cleanedCards.length !== persisted.cards.length) {
+        await storageService.save({
+          ...persisted,
+          cards: hydratedCards,
+        });
+      }
       return;
     }
 
-    const hydratedCards = recalcSortOrder(INITIAL_MOCK_CARDS.map(hydrateRuntimeData));
+    const hydratedCards = recalcSortOrder([]);
     const initialSettings: AppSettings = {
       schema_version: 1,
       theme: get().theme,

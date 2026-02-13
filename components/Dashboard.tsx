@@ -85,12 +85,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     return true;
   };
 
+  const handleToggleEditMode = () => {
+    if (!isEditMode && activeGroup !== 'All') {
+      setActiveGroup('All');
+    }
+    toggleEditMode();
+  };
+
   const handleDragStart = (event: React.DragEvent, cardId: string, size: Card['ui_config']['size']) => {
     setDraggingCardId(cardId);
     const width = size.startsWith('2') ? 2 : 1;
     const height = size.endsWith('2') ? 2 : 1;
     setDragCardSize({ w: width, h: height });
+
+    // Required by WebKit/Safari for drag-and-drop to keep firing drop events.
+    event.dataTransfer.setData('text/plain', cardId);
     event.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggingCardId(null);
+    setDragCardSize(null);
   };
 
   const handleDragOverCell = (event: React.DragEvent, x: number, y: number) => {
@@ -107,8 +122,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
       moveCard(draggingCardId, x, y);
     }
 
-    setDraggingCardId(null);
-    setDragCardSize(null);
+    handleDragEnd();
   };
 
   const gridCells = useMemo(() => {
@@ -152,7 +166,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 h-full flex flex-col">
+    <div className="p-4 md:p-8 h-full min-h-0 flex flex-col gap-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">MyMetrics</h1>
@@ -161,7 +175,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
         <div className="flex items-center gap-2">
           {isEditMode ? (
             <Button
-              onClick={toggleEditMode}
+              onClick={handleToggleEditMode}
               variant="secondary"
               className="bg-primary/10 text-primary border border-primary/20"
             >
@@ -172,7 +186,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
               <Button onClick={() => refreshAllCards('manual')} variant="outline">
                 <RefreshCw size={16} className="mr-2" /> Refresh All
               </Button>
-              <Button onClick={toggleEditMode} variant="outline">
+              <Button onClick={handleToggleEditMode} variant="outline">
                 <LayoutTemplate size={16} className="mr-2" /> Edit Layout
               </Button>
               <Button
@@ -209,7 +223,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto relative min-h-[500px] border border-transparent">
+      <div className="flex-1 min-h-0 overflow-y-auto relative border border-transparent">
         {displayedCards.length === 0 && !isEditMode ? (
           <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border rounded-xl bg-card/30 mt-8">
             <p className="text-muted-foreground">No metrics found in this group.</p>
@@ -231,6 +245,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                 isEditMode={isEditMode}
                 isDragging={draggingCardId === card.id}
                 onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
                 onRefresh={() => refreshCard(card.id)}
                 onEdit={() => onEditCard(card.id)}
               >

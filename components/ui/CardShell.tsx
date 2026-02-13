@@ -19,6 +19,7 @@ interface CardShellProps {
   isEditMode: boolean;
   isDragging?: boolean;
   onDragStart?: (e: React.DragEvent, id: string, size: CardType['ui_config']['size']) => void;
+  onDragEnd?: () => void;
   onRefresh?: () => void;
   onEdit?: () => void;
 }
@@ -34,6 +35,7 @@ export const CardShell: React.FC<CardShellProps> = ({
   isEditMode,
   isDragging,
   onDragStart,
+  onDragEnd,
   onRefresh,
   onEdit,
 }) => {
@@ -70,6 +72,9 @@ export const CardShell: React.FC<CardShellProps> = ({
         if (isEditMode && onDragStart) {
           onDragStart(event, card.id, card.ui_config.size);
         }
+      }}
+      onDragEnd={() => {
+        onDragEnd?.();
       }}
       style={{
         gridColumnStart: card.ui_config.x + 1,

@@ -153,16 +153,24 @@ const App: React.FC = () => {
 
       <main
         className={`
-          flex-1 transition-all duration-300 relative
+          flex-1 transition-all duration-300 relative h-screen overflow-hidden
           ${sidebarOpen ? 'ml-64' : 'ml-16'}
         `}
       >
-        <div className="h-screen overflow-hidden">
+        <div className="h-full overflow-hidden">
           {currentView === 'dashboard' && (
             <Dashboard onAddClick={openCreateWizard} onEditCard={openEditWizard} />
           )}
-          {currentView === 'recycle_bin' && <RecycleBin />}
-          {currentView === 'settings' && <Settings />}
+          {currentView === 'recycle_bin' && (
+            <div className="h-full overflow-y-auto">
+              <RecycleBin />
+            </div>
+          )}
+          {currentView === 'settings' && (
+            <div className="h-full overflow-y-auto">
+              <Settings />
+            </div>
+          )}
         </div>
       </main>
 
