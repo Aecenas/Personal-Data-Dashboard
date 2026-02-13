@@ -7,16 +7,20 @@ interface ScalarCardProps {
 }
 
 export const ScalarCard: React.FC<ScalarCardProps> = ({ card }) => {
-  const data = card.runtimeData?.payload as ScriptOutputScalar;
+  const data = card.runtimeData?.payload as ScriptOutputScalar | undefined;
 
-  if (!data) return null;
+  if (!data) return <div className="text-sm text-muted-foreground">No Data</div>;
 
   const getColor = (status?: string) => {
     switch (status) {
-      case 'success': return 'text-emerald-500';
-      case 'warning': return 'text-amber-500';
-      case 'danger': return 'text-rose-500';
-      default: return 'text-foreground';
+      case 'success':
+        return 'text-emerald-500';
+      case 'warning':
+        return 'text-amber-500';
+      case 'danger':
+        return 'text-rose-500';
+      default:
+        return 'text-foreground';
     }
   };
 
@@ -29,10 +33,10 @@ export const ScalarCard: React.FC<ScalarCardProps> = ({ card }) => {
 
   return (
     <div className="flex items-end justify-between h-full pb-2">
-      <div className="flex flex-col">
+      <div className="flex flex-col overflow-hidden">
         <div className={`text-4xl font-bold tracking-tight ${getColor(data.color)}`}>
           {data.value}
-          <span className="text-lg font-medium text-muted-foreground ml-1">{data.unit}</span>
+          {data.unit && <span className="text-lg font-medium text-muted-foreground ml-1">{data.unit}</span>}
         </div>
       </div>
       <div className="mb-2">

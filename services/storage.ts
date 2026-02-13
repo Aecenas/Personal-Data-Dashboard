@@ -1,182 +1,314 @@
-import { BaseDirectory, readTextFile, writeTextFile, mkdir, exists, copyFile, remove } from '@tauri-apps/plugin-fs';
-import { Card } from '../types';
+import { BaseDirectory, readTextFile, writeTextFile, mkdir, exists } from '@tauri-apps/plugin-fs';
+import { AppSettings, Card, MappingConfig, RefreshConfig } from '../types';
 
-// The pointer file stays in the default location and points to the real data
 const POINTER_FILENAME = 'storage_config.json';
 const DATA_FILENAME = 'user_settings.json';
 const DEFAULT_SUBDIR = 'data';
-
-export interface AppSettings {
-    theme: 'light' | 'dark';
-    activeGroup: string;
-    cards: Card[];
-}
+const SCHEMA_VERSION = 1;
 
 interface StorageConfig {
-    customPath: string | null; // If null, use default AppLocalData/data
+  customPath: string | null;
 }
 
-// Check for Tauri environment
 const isTauri = () => typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 
-// Helper: Get the resolved full path for the data file
-// Returns { path: string, baseDir?: BaseDirectory }
-// If baseDir is provided, path is relative to it. If not, path is absolute.
-const resolveDataPath = async (): Promise<{ path: string; baseDir?: BaseDirectory; isCustom: boolean }> => {
-    try {
-        // 1. Try to read pointer file from AppLocalData
-        if (await exists(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData })) {
-            const content = await readTextFile(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData });
-            const config: StorageConfig = JSON.parse(content);
-            
-            if (config.customPath) {
-                // Ensure the custom directory exists
-                // Note: We assume the path is absolute and valid.
-                // In a robust app, we'd verify access here.
-                return { path: `${config.customPath}/${DATA_FILENAME}`, isCustom: true };
-            }
-        }
-    } catch (e) {
-        console.warn("Failed to read storage pointer, falling back to default.", e);
-    }
+const defaultRefreshConfig: RefreshConfig = {
+  interval_sec: 0,
+  refresh_on_start: true,
+  refresh_on_resume: true,
+  timeout_ms: 10000,
+};
 
-    // 2. Default fallback
-    return { path: `${DEFAULT_SUBDIR}/${DATA_FILENAME}`, baseDir: BaseDirectory.AppLocalData, isCustom: false };
+const createDefaultMapping = (cardType: Card['type']): MappingConfig => {
+  if (cardType === 'scalar') {
+    return {
+      scalar: {
+        value_key: 'value',
+        unit_key: 'unit',
+        trend_key: 'trend',
+        color_key: 'color',
+      },
+    };
+  }
+
+  if (cardType === 'series') {
+    return {
+      series: {
+        x_axis_key: 'x_axis',
+        series_key: 'series',
+        series_name_key: 'name',
+        series_values_key: 'values',
+      },
+    };
+  }
+
+  return {
+    status: {
+      label_key: 'label',
+      state_key: 'state',
+      message_key: 'message',
+    },
+  };
+};
+
+const normalizeMapping = (rawMapping: any, cardType: Card['type']): MappingConfig => {
+  const defaults = createDefaultMapping(cardType);
+
+  if (!rawMapping || typeof rawMapping !== 'object') return defaults;
+
+  const legacyScalar = rawMapping.value_key
+    ? {
+        value_key: rawMapping.value_key,
+        unit_key: rawMapping.unit_key,
+        trend_key: rawMapping.trend_key,
+        color_key: rawMapping.color_key,
+      }
+    : undefined;
+
+  const legacySeries = rawMapping.x_key || rawMapping.y_key || rawMapping.label_key
+    ? {
+        x_axis_key: rawMapping.x_key ?? 'x_axis',
+        series_key: 'series',
+        series_name_key: rawMapping.label_key ?? 'name',
+        series_values_key: rawMapping.y_key ?? 'values',
+      }
+    : undefined;
+
+  const legacyStatus = rawMapping.label_key
+    ? {
+        label_key: rawMapping.label_key,
+        state_key: rawMapping.state_key ?? 'state',
+        message_key: rawMapping.message_key ?? 'message',
+      }
+    : undefined;
+
+  return {
+    scalar: {
+      ...(defaults.scalar ?? {}),
+      ...(legacyScalar ?? {}),
+      ...(rawMapping.scalar ?? {}),
+    },
+    series: {
+      ...(defaults.series ?? {}),
+      ...(legacySeries ?? {}),
+      ...(rawMapping.series ?? {}),
+    },
+    status: {
+      ...(defaults.status ?? {}),
+      ...(legacyStatus ?? {}),
+      ...(rawMapping.status ?? {}),
+    },
+  };
+};
+
+const deriveCacheFromLegacyRuntime = (legacyRuntimeData: any) => {
+  if (!legacyRuntimeData || typeof legacyRuntimeData !== 'object') return undefined;
+
+  return {
+    last_success_payload: legacyRuntimeData.payload,
+    last_success_at: legacyRuntimeData.lastUpdated,
+    last_error: legacyRuntimeData.error,
+    last_error_at: legacyRuntimeData.error ? Date.now() : undefined,
+  };
+};
+
+const normalizeCard = (rawCard: any, index: number): Card => {
+  const cardType: Card['type'] =
+    rawCard?.type === 'scalar' || rawCard?.type === 'series' || rawCard?.type === 'status'
+      ? rawCard.type
+      : 'scalar';
+
+  const mapping = normalizeMapping(rawCard?.mapping_config, cardType);
+
+  const cacheFromLegacy = deriveCacheFromLegacyRuntime(rawCard?.runtimeData);
+
+  return {
+    id: String(rawCard?.id ?? crypto.randomUUID()),
+    title: String(rawCard?.title ?? `Card ${index + 1}`),
+    group: String(rawCard?.group ?? 'Default'),
+    type: cardType,
+    script_config: {
+      path: String(rawCard?.script_config?.path ?? ''),
+      args: Array.isArray(rawCard?.script_config?.args)
+        ? rawCard.script_config.args.map((arg: unknown) => String(arg))
+        : [],
+      env_path: rawCard?.script_config?.env_path
+        ? String(rawCard.script_config.env_path)
+        : undefined,
+    },
+    mapping_config: mapping,
+    refresh_config: {
+      ...defaultRefreshConfig,
+      ...(rawCard?.refresh_config ?? {}),
+    },
+    ui_config: {
+      color_theme: rawCard?.ui_config?.color_theme ?? 'default',
+      size: rawCard?.ui_config?.size ?? '1x1',
+      x: Number(rawCard?.ui_config?.x ?? 0),
+      y: Number(rawCard?.ui_config?.y ?? 0),
+    },
+    status: {
+      is_deleted: Boolean(rawCard?.status?.is_deleted),
+      deleted_at: rawCard?.status?.deleted_at ? String(rawCard.status.deleted_at) : null,
+      sort_order: Number(rawCard?.status?.sort_order ?? index + 1),
+    },
+    cache_data: rawCard?.cache_data ?? cacheFromLegacy,
+  };
+};
+
+const migrateToV1 = (input: any): AppSettings => {
+  const cardsRaw = Array.isArray(input?.cards) ? input.cards : [];
+  const cards = cardsRaw.map((card: any, index: number) => normalizeCard(card, index));
+
+  return {
+    schema_version: SCHEMA_VERSION,
+    theme: input?.theme === 'light' ? 'light' : 'dark',
+    activeGroup: typeof input?.activeGroup === 'string' ? input.activeGroup : 'All',
+    cards,
+    default_python_path:
+      typeof input?.default_python_path === 'string' ? input.default_python_path : undefined,
+  };
+};
+
+const sanitizeForSave = (settings: AppSettings): AppSettings => {
+  const cards = settings.cards.map((card, index) => ({
+    ...card,
+    status: {
+      ...card.status,
+      sort_order: Number.isFinite(card.status.sort_order) ? card.status.sort_order : index + 1,
+    },
+    refresh_config: {
+      ...defaultRefreshConfig,
+      ...card.refresh_config,
+    },
+    runtimeData: undefined,
+  }));
+
+  return {
+    schema_version: SCHEMA_VERSION,
+    theme: settings.theme,
+    activeGroup: settings.activeGroup,
+    default_python_path: settings.default_python_path,
+    cards,
+  };
+};
+
+const resolveDataPath = async (): Promise<{ path: string; baseDir?: BaseDirectory; isCustom: boolean }> => {
+  try {
+    if (await exists(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData })) {
+      const content = await readTextFile(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData });
+      const config: StorageConfig = JSON.parse(content);
+
+      if (config.customPath) {
+        return { path: `${config.customPath}/${DATA_FILENAME}`, isCustom: true };
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to read storage pointer, fallback to default', error);
+  }
+
+  return {
+    path: `${DEFAULT_SUBDIR}/${DATA_FILENAME}`,
+    baseDir: BaseDirectory.AppLocalData,
+    isCustom: false,
+  };
 };
 
 export const storageService = {
-    // Get the current directory path (for UI display)
-    async getCurrentDataPath(): Promise<string> {
-        if (!isTauri()) return "Browser Memory";
-        
-        try {
-            // Read pointer
-            if (await exists(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData })) {
-                const content = await readTextFile(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData });
-                const config = JSON.parse(content);
-                if (config.customPath) return config.customPath;
-            }
-            // If default, we return a friendly string. 
-            // Getting the actual absolute path of BaseDirectory.AppLocalData requires backend invocation,
-            // so here we just return a placeholder or relative path.
-            return "Default (App Data Folder)";
-        } catch {
-            return "Default (App Data Folder)";
-        }
-    },
+  async getCurrentDataPath(): Promise<string> {
+    if (!isTauri()) return 'Browser Memory';
 
-    // Move data to a new location
-    async setCustomDataPath(newFolder: string | null) {
-        if (!isTauri()) return;
-
-        try {
-            // 1. Get current location
-            const current = await resolveDataPath();
-            
-            // 2. Determine new full file path
-            // Note: newFolder is an absolute path from the dialog
-            let newFilePath: string;
-            let writeOptions: any = {};
-
-            if (newFolder) {
-                 newFilePath = `${newFolder}/${DATA_FILENAME}`;
-            } else {
-                 // Resetting to default
-                 newFilePath = `${DEFAULT_SUBDIR}/${DATA_FILENAME}`;
-                 writeOptions = { baseDir: BaseDirectory.AppLocalData };
-            }
-
-            // 3. Migrate Data: Read old -> Write new
-            let currentData = null;
-            try {
-                if (current.baseDir) {
-                    if (await exists(current.path, { baseDir: current.baseDir })) {
-                        currentData = await readTextFile(current.path, { baseDir: current.baseDir });
-                    }
-                } else {
-                    // Absolute path read
-                    // Note: exists() with absolute path might need empty baseDir depending on plugin version,
-                    // but usually works if we omit baseDir for absolute paths in v2? 
-                    // Actually v2 plugin-fs requires a capability to read absolute paths.
-                    // We try to read.
-                    currentData = await readTextFile(current.path); 
-                }
-            } catch (readErr) {
-                console.warn("Could not read old data to migrate:", readErr);
-            }
-
-            if (currentData) {
-                if (newFolder) {
-                    await writeTextFile(newFilePath, currentData);
-                } else {
-                    // Ensure default dir exists
-                    await mkdir(DEFAULT_SUBDIR, { baseDir: BaseDirectory.AppLocalData, recursive: true });
-                    await writeTextFile(newFilePath, currentData, writeOptions);
-                }
-            }
-
-            // 4. Update Pointer File
-            const pointerConfig: StorageConfig = { customPath: newFolder };
-            await writeTextFile(POINTER_FILENAME, JSON.stringify(pointerConfig), { baseDir: BaseDirectory.AppLocalData });
-
-        } catch (e) {
-            console.error("Failed to set custom data path", e);
-            throw e;
-        }
-    },
-
-    async save(settings: AppSettings) {
-        // Strip runtimeData
-        const data = JSON.stringify(settings, (key, value) => {
-            if (key === 'runtimeData') return undefined;
-            return value;
-        }, 2);
-
-        if (isTauri()) {
-            try {
-                const location = await resolveDataPath();
-                
-                if (location.baseDir) {
-                    // Default Location
-                    await mkdir(DEFAULT_SUBDIR, { baseDir: location.baseDir, recursive: true });
-                    await writeTextFile(location.path, data, { baseDir: location.baseDir });
-                } else {
-                    // Custom Absolute Location
-                    // We assume the folder exists (created by user or checked in setCustomPath)
-                    await writeTextFile(location.path, data);
-                }
-            } catch (err) {
-                console.error("Failed to save settings to disk:", err);
-            }
-        }
-    },
-
-    async load(): Promise<AppSettings | null> {
-        if (isTauri()) {
-            try {
-                const location = await resolveDataPath();
-                let content = '';
-
-                if (location.baseDir) {
-                    if (!(await exists(location.path, { baseDir: location.baseDir }))) return null;
-                    content = await readTextFile(location.path, { baseDir: location.baseDir });
-                } else {
-                    // Absolute path
-                    // We might need to handle cases where custom path was deleted externally
-                    try {
-                        content = await readTextFile(location.path);
-                    } catch (e) {
-                         console.error("Custom path not accessible, reverting to default?");
-                         return null;
-                    }
-                }
-                
-                return JSON.parse(content);
-            } catch (e) {
-                console.error("Failed to load settings from disk:", e);
-                return null;
-            }
-        }
-        return null;
+    try {
+      if (await exists(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData })) {
+        const content = await readTextFile(POINTER_FILENAME, { baseDir: BaseDirectory.AppLocalData });
+        const config = JSON.parse(content) as StorageConfig;
+        if (config.customPath) return config.customPath;
+      }
+      return 'Default (App Data Folder)';
+    } catch {
+      return 'Default (App Data Folder)';
     }
+  },
+
+  async setCustomDataPath(newFolder: string | null) {
+    if (!isTauri()) return;
+
+    const current = await resolveDataPath();
+
+    let currentData: string | null = null;
+    try {
+      if (current.baseDir) {
+        if (await exists(current.path, { baseDir: current.baseDir })) {
+          currentData = await readTextFile(current.path, { baseDir: current.baseDir });
+        }
+      } else {
+        currentData = await readTextFile(current.path);
+      }
+    } catch (error) {
+      console.warn('Unable to read existing data while migrating storage path', error);
+    }
+
+    if (newFolder) {
+      if (currentData) {
+        await writeTextFile(`${newFolder}/${DATA_FILENAME}`, currentData);
+      }
+    } else {
+      await mkdir(DEFAULT_SUBDIR, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+      if (currentData) {
+        await writeTextFile(`${DEFAULT_SUBDIR}/${DATA_FILENAME}`, currentData, {
+          baseDir: BaseDirectory.AppLocalData,
+        });
+      }
+    }
+
+    const pointerConfig: StorageConfig = { customPath: newFolder };
+    await writeTextFile(POINTER_FILENAME, JSON.stringify(pointerConfig), {
+      baseDir: BaseDirectory.AppLocalData,
+    });
+  },
+
+  async save(settings: AppSettings) {
+    const payload = JSON.stringify(sanitizeForSave(settings), null, 2);
+
+    if (!isTauri()) return;
+
+    const location = await resolveDataPath();
+    if (location.baseDir) {
+      await mkdir(DEFAULT_SUBDIR, { baseDir: location.baseDir, recursive: true });
+      await writeTextFile(location.path, payload, { baseDir: location.baseDir });
+      return;
+    }
+
+    await writeTextFile(location.path, payload);
+  },
+
+  async load(): Promise<AppSettings | null> {
+    if (!isTauri()) return null;
+
+    try {
+      const location = await resolveDataPath();
+      let content = '';
+
+      if (location.baseDir) {
+        if (!(await exists(location.path, { baseDir: location.baseDir }))) return null;
+        content = await readTextFile(location.path, { baseDir: location.baseDir });
+      } else {
+        content = await readTextFile(location.path);
+      }
+
+      const parsed = JSON.parse(content);
+      if (parsed?.schema_version === SCHEMA_VERSION) {
+        return sanitizeForSave(parsed as AppSettings);
+      }
+
+      return migrateToV1(parsed);
+    } catch (error) {
+      console.error('Failed to load settings from disk', error);
+      return null;
+    }
+  },
+};
+
+export const storageMigration = {
+  migrateToV1,
 };

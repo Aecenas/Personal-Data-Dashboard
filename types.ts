@@ -1,6 +1,6 @@
-// Enums and Types based on PRD
-
 export type CardType = 'scalar' | 'series' | 'status';
+
+export type RuntimeState = 'idle' | 'loading' | 'success' | 'error';
 
 export interface ScriptConfig {
   path: string;
@@ -8,17 +8,42 @@ export interface ScriptConfig {
   env_path?: string;
 }
 
+export interface ScalarMappingConfig {
+  value_key: string;
+  unit_key?: string;
+  trend_key?: string;
+  color_key?: string;
+}
+
+export interface SeriesMappingConfig {
+  x_axis_key: string;
+  series_key: string;
+  series_name_key: string;
+  series_values_key: string;
+}
+
+export interface StatusMappingConfig {
+  label_key: string;
+  state_key: string;
+  message_key?: string;
+}
+
 export interface MappingConfig {
-  value_key?: string; // For scalar
-  x_key?: string;     // For series
-  y_key?: string;     // For series
-  label_key?: string; // For status/series
+  scalar?: ScalarMappingConfig;
+  series?: SeriesMappingConfig;
+  status?: StatusMappingConfig;
+}
+
+export interface RefreshConfig {
+  interval_sec: number;
+  refresh_on_start: boolean;
+  refresh_on_resume: boolean;
+  timeout_ms: number;
 }
 
 export interface UIConfig {
   color_theme: 'default' | 'blue' | 'green' | 'red' | 'yellow' | 'purple';
   size: '1x1' | '2x1' | '1x2' | '2x2';
-  // 0-based coordinates. x: 0-3 (fixed 4 columns), y: 0-Infinity
   x: number;
   y: number;
 }
@@ -26,9 +51,9 @@ export interface UIConfig {
 export interface CardStatus {
   is_deleted: boolean;
   deleted_at: string | null;
+  sort_order: number;
 }
 
-// Data Contract Payload (from Python stdout)
 export interface ScriptOutputScalar {
   value: number | string;
   unit?: string;
@@ -42,15 +67,39 @@ export interface ScriptOutputSeriesItem {
 }
 
 export interface ScriptOutputSeries {
-  x_axis: string[];
+  x_axis: Array<string | number>;
   series: ScriptOutputSeriesItem[];
 }
 
-export interface CardData {
+export interface ScriptOutputStatus {
+  label: string;
+  state: 'ok' | 'warning' | 'error' | 'unknown';
+  message?: string;
+}
+
+export type NormalizedCardPayload = ScriptOutputScalar | ScriptOutputSeries | ScriptOutputStatus;
+
+export interface CacheData {
+  last_success_payload?: NormalizedCardPayload;
+  last_success_at?: number;
+  last_error?: string;
+  last_error_at?: number;
+  raw_stdout_excerpt?: string;
+  stderr_excerpt?: string;
+  last_exit_code?: number | null;
+  last_duration_ms?: number;
+}
+
+export interface CardRuntimeData {
+  state: RuntimeState;
   isLoading: boolean;
+  source: 'live' | 'cache' | 'none';
+  payload?: NormalizedCardPayload;
   error?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  durationMs?: number;
   lastUpdated?: number;
-  payload?: ScriptOutputScalar | ScriptOutputSeries; // Simplified for UI
 }
 
 export interface Card {
@@ -60,10 +109,19 @@ export interface Card {
   type: CardType;
   script_config: ScriptConfig;
   mapping_config: MappingConfig;
+  refresh_config: RefreshConfig;
   ui_config: UIConfig;
   status: CardStatus;
-  // Runtime state (not persisted in DB, but managed in store)
-  runtimeData?: CardData;
+  cache_data?: CacheData;
+  runtimeData?: CardRuntimeData;
+}
+
+export interface AppSettings {
+  schema_version: number;
+  theme: 'dark' | 'light';
+  activeGroup: string;
+  cards: Card[];
+  default_python_path?: string;
 }
 
 export type ViewMode = 'dashboard' | 'recycle_bin' | 'settings';
