@@ -49,6 +49,13 @@ export interface UIConfig {
   y: number;
 }
 
+export interface LayoutPosition {
+  x: number;
+  y: number;
+}
+
+export type LayoutPositionMap = Record<string, LayoutPosition>;
+
 export interface CardStatus {
   is_deleted: boolean;
   deleted_at: string | null;
@@ -112,6 +119,7 @@ export interface Card {
   mapping_config: MappingConfig;
   refresh_config: RefreshConfig;
   ui_config: UIConfig;
+  layout_positions?: LayoutPositionMap;
   status: CardStatus;
   cache_data?: CacheData;
   runtimeData?: CardRuntimeData;

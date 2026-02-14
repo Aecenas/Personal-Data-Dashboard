@@ -1,6 +1,7 @@
 import { BaseDirectory, readTextFile, writeTextFile, mkdir, exists } from '@tauri-apps/plugin-fs';
 import { AppLanguage, AppSettings, Card, MappingConfig, RefreshConfig } from '../types';
 import { t } from '../i18n';
+import { ensureCardLayoutScopes } from '../layout';
 
 const POINTER_FILENAME = 'storage_config.json';
 const DATA_FILENAME = 'user_settings.json';
@@ -128,7 +129,7 @@ const normalizeCard = (rawCard: any, index: number): Card => {
 
   const cacheFromLegacy = deriveCacheFromLegacyRuntime(rawCard?.runtimeData);
 
-  return {
+  const card: Card = {
     id: String(rawCard?.id ?? crypto.randomUUID()),
     title: String(rawCard?.title ?? `Card ${index + 1}`),
     group: String(rawCard?.group ?? 'Default'),
@@ -153,6 +154,10 @@ const normalizeCard = (rawCard: any, index: number): Card => {
       x: Number(rawCard?.ui_config?.x ?? 0),
       y: Number(rawCard?.ui_config?.y ?? 0),
     },
+    layout_positions:
+      rawCard?.layout_positions && typeof rawCard.layout_positions === 'object'
+        ? rawCard.layout_positions
+        : undefined,
     status: {
       is_deleted: Boolean(rawCard?.status?.is_deleted),
       deleted_at: rawCard?.status?.deleted_at ? String(rawCard.status.deleted_at) : null,
@@ -160,6 +165,8 @@ const normalizeCard = (rawCard: any, index: number): Card => {
     },
     cache_data: rawCard?.cache_data ?? cacheFromLegacy,
   };
+
+  return ensureCardLayoutScopes(card);
 };
 
 const migrateToV1 = (input: any): AppSettings => {
@@ -178,18 +185,23 @@ const migrateToV1 = (input: any): AppSettings => {
 };
 
 const sanitizeForSave = (settings: AppSettings): AppSettings => {
-  const cards = settings.cards.map((card, index) => ({
-    ...card,
-    status: {
-      ...card.status,
-      sort_order: Number.isFinite(card.status.sort_order) ? card.status.sort_order : index + 1,
-    },
-    refresh_config: {
-      ...defaultRefreshConfig,
-      ...card.refresh_config,
-    },
-    runtimeData: undefined,
-  }));
+  const cards = settings.cards.map((card, index) => {
+    const normalizedCard = ensureCardLayoutScopes(card);
+    return {
+      ...normalizedCard,
+      status: {
+        ...normalizedCard.status,
+        sort_order: Number.isFinite(normalizedCard.status.sort_order)
+          ? normalizedCard.status.sort_order
+          : index + 1,
+      },
+      refresh_config: {
+        ...defaultRefreshConfig,
+        ...normalizedCard.refresh_config,
+      },
+      runtimeData: undefined,
+    };
+  });
 
   return {
     schema_version: SCHEMA_VERSION,

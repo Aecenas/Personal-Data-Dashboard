@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Card, CardRuntimeData, AppSettings, ViewMode, AppLanguage } from './types';
 import { storageService } from './services/storage';
 import { executionService } from './services/execution';
+import { ensureCardLayoutScopes, getCardLayoutPosition, setCardLayoutPosition } from './layout';
 
 const GRID_COLUMNS = 4;
 const LEGACY_SAMPLE_IDS = new Set(['1', '2', '3', '4']);
@@ -26,38 +27,49 @@ const checkCollision = (
   w: number,
   h: number,
   excludeId?: string,
+  scopeGroup?: string,
 ) => {
   return cards.some((card) => {
     if (card.status.is_deleted) return false;
     if (card.id === excludeId) return false;
+    if (scopeGroup && card.group !== scopeGroup) return false;
 
+    const position = getCardLayoutPosition(card, scopeGroup);
     const size = getCardSize(card.ui_config.size);
     return (
-      x < card.ui_config.x + size.w &&
-      x + w > card.ui_config.x &&
-      y < card.ui_config.y + size.h &&
-      y + h > card.ui_config.y
+      x < position.x + size.w &&
+      x + w > position.x &&
+      y < position.y + size.h &&
+      y + h > position.y
     );
   });
 };
 
-const findNextY = (cards: Card[]) => {
+const findNextY = (cards: Card[], scopeGroup?: string) => {
   if (cards.length === 0) return 0;
   let maxY = 0;
   cards.forEach((card) => {
     if (card.status.is_deleted) return;
+    if (scopeGroup && card.group !== scopeGroup) return;
+    const position = getCardLayoutPosition(card, scopeGroup);
     const size = getCardSize(card.ui_config.size);
-    maxY = Math.max(maxY, card.ui_config.y + size.h);
+    maxY = Math.max(maxY, position.y + size.h);
   });
   return maxY;
 };
 
-const findPlacement = (cards: Card[], size: Card['ui_config']['size'], startY = 0, excludeId?: string) => {
+const findPlacement = (
+  cards: Card[],
+  size: Card['ui_config']['size'],
+  startY = 0,
+  excludeId?: string,
+  scopeGroup?: string,
+) => {
   const { w, h } = getCardSize(size);
 
   for (let y = startY; y < startY + 200; y += 1) {
     for (let x = 0; x <= GRID_COLUMNS - w; x += 1) {
-      if (!checkCollision(cards, x, y, w, h, excludeId)) {
+      if (!checkCollision(cards, x, y, w, h, excludeId, scopeGroup)) {
         return { x, y };
       }
     }
@@ -71,8 +83,10 @@ const recalcSortOrder = (cards: Card[]): Card[] => {
     .filter((card) => !card.status.is_deleted)
     .slice()
     .sort((a, b) => {
-      if (a.ui_config.y !== b.ui_config.y) return a.ui_config.y - b.ui_config.y;
-      return a.ui_config.x - b.ui_config.x;
+      const posA = getCardLayoutPosition(a, undefined);
+      const posB = getCardLayoutPosition(b, undefined);
+      if (posA.y !== posB.y) return posA.y - posB.y;
+      return posA.x - posB.x;
     });
 
   const orderMap = new Map<string, number>();
@@ -196,7 +210,7 @@ interface AppState {
   clearRecycleBin: () => void;
   addCard: (card: Card) => void;
   updateCard: (id: string, updates: Partial<Card>) => void;
-  moveCard: (id: string, x: number, y: number) => void;
+  moveCard: (id: string, x: number, y: number, scopeGroup?: string) => void;
 
   refreshCard: (id: string) => Promise<void>;
   refreshAllCards: (reason?: 'manual' | 'start' | 'resume') => Promise<void>;
@@ -230,7 +244,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     if (persisted) {
       const cleanedCards = persisted.cards.filter((card) => !isLegacySampleCard(card));
-      const hydratedCards = recalcSortOrder(cleanedCards.map(hydrateRuntimeData));
+      const hydratedCards = recalcSortOrder(
+        cleanedCards.map(hydrateRuntimeData).map((card) => ensureCardLayoutScopes(card)),
+      );
       set({
         theme: persisted.theme,
         language: persisted.language,
@@ -310,20 +326,23 @@ export const useStore = create<AppState>((set, get) => ({
           : card,
       );
 
-      const visibleCards = baseCards.filter((card) => !card.status.is_deleted && card.id !== id);
-      const startY = findNextY(visibleCards);
-      const placement = findPlacement(baseCards, target.ui_config.size, startY, id);
+      const visibleCards = baseCards.filter(
+        (card) => !card.status.is_deleted && card.id !== id && card.group === target.group,
+      );
+      const startY = findNextY(visibleCards, target.group);
+      const groupPlacement = findPlacement(baseCards, target.ui_config.size, startY, id, target.group);
+
+      const allVisibleCards = baseCards.filter((card) => !card.status.is_deleted && card.id !== id);
+      const allStartY = findNextY(allVisibleCards);
+      const allPlacement = findPlacement(baseCards, target.ui_config.size, allStartY, id);
 
       const placedCards = baseCards.map((card) =>
         card.id === id
-          ? {
-              ...card,
-              ui_config: {
-                ...card.ui_config,
-                x: placement.x,
-                y: placement.y,
-              },
-            }
+          ? setCardLayoutPosition(
+              setCardLayoutPosition(ensureCardLayoutScopes(card), target.group, groupPlacement),
+              undefined,
+              allPlacement,
+            )
           : card,
       );
 
@@ -342,7 +361,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   addCard: (incomingCard) =>
     set((state) => {
-      const card = {
+      const card = ensureCardLayoutScopes({
         ...incomingCard,
         status: {
           ...incomingCard.status,
@@ -352,17 +371,15 @@ export const useStore = create<AppState>((set, get) => ({
             incomingCard.status?.sort_order ??
             state.cards.filter((item) => !item.status.is_deleted).length + 1,
         },
-      };
+      });
 
-      const placement = findPlacement(state.cards, card.ui_config.size, 0);
-      const withPlacement: Card = {
-        ...card,
-        ui_config: {
-          ...card.ui_config,
-          x: placement.x,
-          y: placement.y,
-        },
-      };
+      const allPlacement = findPlacement(state.cards, card.ui_config.size, 0);
+      const groupPlacement = findPlacement(state.cards, card.ui_config.size, 0, undefined, card.group);
+      const withPlacement = setCardLayoutPosition(
+        setCardLayoutPosition(card, card.group, groupPlacement),
+        undefined,
+        allPlacement,
+      );
 
       return { cards: recalcSortOrder([...state.cards, withPlacement]) };
     }),
@@ -371,32 +388,30 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const updatedCards = state.cards.map((card) => {
         if (card.id !== id) return card;
-        return mergeCard(card, updates);
+
+        const merged = ensureCardLayoutScopes(mergeCard(card, updates));
+        if (!updates.group || updates.group === card.group) return merged;
+
+        const previousGroupPosition = getCardLayoutPosition(card, card.group);
+        return setCardLayoutPosition(merged, updates.group, previousGroupPosition);
       });
 
       return { cards: recalcSortOrder(updatedCards) };
     }),
 
-  moveCard: (id, x, y) =>
+  moveCard: (id, x, y, scopeGroup) =>
     set((state) => {
       const card = state.cards.find((item) => item.id === id);
       if (!card || card.status.is_deleted) return { cards: state.cards };
 
+      if (scopeGroup && card.group !== scopeGroup) return { cards: state.cards };
+
       const { w, h } = getCardSize(card.ui_config.size);
       if (x < 0 || y < 0 || x + w > GRID_COLUMNS) return { cards: state.cards };
-      if (checkCollision(state.cards, x, y, w, h, id)) return { cards: state.cards };
+      if (checkCollision(state.cards, x, y, w, h, id, scopeGroup)) return { cards: state.cards };
 
       const movedCards = state.cards.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              ui_config: {
-                ...item.ui_config,
-                x,
-                y,
-              },
-            }
-          : item,
+        item.id === id ? setCardLayoutPosition(item, scopeGroup, { x, y }) : item,
       );
 
       return { cards: recalcSortOrder(movedCards) };

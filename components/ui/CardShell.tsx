@@ -6,7 +6,6 @@ import {
   Trash2,
   Settings,
   AlertCircle,
-  Move,
   Clock3,
   CircleAlert,
 } from 'lucide-react';
@@ -18,9 +17,8 @@ interface CardShellProps {
   card: CardType;
   children: React.ReactNode;
   isEditMode: boolean;
-  isDragging?: boolean;
-  onDragStart?: (e: React.DragEvent, id: string, size: CardType['ui_config']['size']) => void;
-  onDragEnd?: () => void;
+  isSelected?: boolean;
+  onSelect?: () => void;
   onRefresh?: () => void;
   onEdit?: () => void;
 }
@@ -34,13 +32,12 @@ export const CardShell: React.FC<CardShellProps> = ({
   card,
   children,
   isEditMode,
-  isDragging,
-  onDragStart,
-  onDragEnd,
+  isSelected,
+  onSelect,
   onRefresh,
   onEdit,
 }) => {
-  const { softDeleteCard, language } = useStore();
+  const { softDeleteCard, language, theme } = useStore();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const tr = (key: string) => t(language, key);
 
@@ -66,17 +63,27 @@ export const CardShell: React.FC<CardShellProps> = ({
 
   const isLoading = card.runtimeData?.isLoading;
   const isError = card.runtimeData?.state === 'error';
+  const selectedInvertedClass =
+    isEditMode && isSelected
+      ? theme === 'dark'
+        ? 'bg-white text-slate-900 border-slate-200'
+        : 'bg-slate-100 text-slate-900 border-slate-300'
+      : '';
 
   return (
     <div
-      draggable={isEditMode}
-      onDragStart={(event) => {
-        if (isEditMode && onDragStart) {
-          onDragStart(event, card.id, card.ui_config.size);
-        }
+      role={isEditMode ? 'button' : undefined}
+      tabIndex={isEditMode ? 0 : undefined}
+      aria-pressed={isEditMode ? Boolean(isSelected) : undefined}
+      onClick={() => {
+        if (isEditMode) onSelect?.();
       }}
-      onDragEnd={() => {
-        onDragEnd?.();
+      onKeyDown={(event) => {
+        if (!isEditMode) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect?.();
+        }
       }}
       style={{
         gridColumnStart: card.ui_config.x + 1,
@@ -86,22 +93,14 @@ export const CardShell: React.FC<CardShellProps> = ({
       }}
       className={`
         relative group bg-card text-card-foreground rounded-lg border border-border shadow-sm
-        flex flex-col overflow-hidden transition-all duration-200 ease-out
+        flex flex-col overflow-hidden transition-[box-shadow,border-color,background-color] duration-150 ease-out
         ${getBorderClass(card.ui_config.color_theme)}
-        ${isEditMode ? 'cursor-grab active:cursor-grabbing z-20' : 'z-10'}
-        ${isEditMode && !isDragging ? 'hover:scale-[1.02] shadow-xl ring-2 ring-primary/20 animate-pulse' : ''}
-        ${isDragging ? 'opacity-30 pointer-events-none scale-[0.98] border-dashed grayscale' : ''}
+        ${isEditMode ? 'cursor-pointer z-20 outline-none' : 'z-10'}
+        ${isEditMode ? 'hover:shadow-md' : ''}
+        ${selectedInvertedClass}
         h-full
       `}
     >
-      {isEditMode && !isDragging && (
-        <div className="absolute inset-0 bg-background/5 z-30 pointer-events-none flex items-center justify-center">
-          <div className="bg-background/80 p-2 rounded-full shadow-sm backdrop-blur-sm border border-border">
-            <Move size={20} className="text-primary" />
-          </div>
-        </div>
-      )}
-
       <div className="flex items-center justify-between p-4 pb-2 select-none gap-2">
         <h3 className="font-semibold tracking-tight truncate text-sm text-muted-foreground uppercase">{card.title}</h3>
 
@@ -177,7 +176,9 @@ export const CardShell: React.FC<CardShellProps> = ({
             )}
           </div>
         ) : (
-          <div className="pointer-events-auto h-full w-full flex flex-col">{children}</div>
+          <div className={`${isEditMode ? 'pointer-events-none' : 'pointer-events-auto'} h-full w-full flex flex-col`}>
+            {children}
+          </div>
         )}
       </div>
 

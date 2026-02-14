@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { CardShell } from './ui/CardShell';
 import { ScalarCard } from './cards/ScalarCard';
@@ -8,6 +8,7 @@ import { Plus, LayoutTemplate, Check, RefreshCw } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Card } from '../types';
 import { t } from '../i18n';
+import { getCardLayoutPosition } from '../layout';
 
 interface DashboardProps {
   onAddClick: () => void;
@@ -26,16 +27,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     refreshCard,
     language,
   } = useStore();
-  const tr = (key: string) => t(language, key);
+  const tr = (key: string, params?: Record<string, string | number>) => t(language, key, params);
 
-  const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
-  const [dragCardSize, setDragCardSize] = useState<{ w: number; h: number } | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const visibleCards = useMemo(() => cards.filter((card) => !card.status.is_deleted), [cards]);
 
   const displayedCards = useMemo(
     () =>
-      activeGroup === 'All' ? visibleCards : visibleCards.filter((card) => card.group === activeGroup),
+      (activeGroup === 'All' ? visibleCards : visibleCards.filter((card) => card.group === activeGroup)).map(
+        (card) => {
+          const position = getCardLayoutPosition(card, activeGroup);
+          if (card.ui_config.x === position.x && card.ui_config.y === position.y) return card;
+          return {
+            ...card,
+            ui_config: {
+              ...card.ui_config,
+              x: position.x,
+              y: position.y,
+            },
+          };
+        },
+      ),
     [activeGroup, visibleCards],
   );
 
@@ -57,110 +70,69 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     return isEditMode ? max + 2 : max;
   }, [displayedCards, isEditMode]);
 
-  const isOccupied = (x: number, y: number, excludeId: string | null) => {
-    return displayedCards.some((card) => {
-      if (card.id === excludeId) return false;
+  const selectedCard = useMemo(
+    () => displayedCards.find((card) => card.id === selectedCardId) ?? null,
+    [displayedCards, selectedCardId],
+  );
 
-      const width = card.ui_config.size.startsWith('2') ? 2 : 1;
-      const height = card.ui_config.size.endsWith('2') ? 2 : 1;
-      const cx = card.ui_config.x;
-      const cy = card.ui_config.y;
-
-      return x >= cx && x < cx + width && y >= cy && y < cy + height;
-    });
-  };
-
-  const canPlace = (
-    targetX: number,
-    targetY: number,
-    width: number,
-    height: number,
-    excludeId: string | null,
-  ) => {
-    if (targetX + width > 4) return false;
-
-    for (let i = 0; i < width; i += 1) {
-      for (let j = 0; j < height; j += 1) {
-        if (isOccupied(targetX + i, targetY + j, excludeId)) return false;
-      }
+  useEffect(() => {
+    if (!isEditMode) {
+      setSelectedCardId(null);
+      return;
     }
 
-    return true;
-  };
+    if (displayedCards.length === 0) {
+      setSelectedCardId(null);
+      return;
+    }
+
+    const selectedStillVisible = selectedCardId
+      ? displayedCards.some((card) => card.id === selectedCardId)
+      : false;
+
+    if (!selectedStillVisible) {
+      setSelectedCardId(displayedCards[0].id);
+    }
+  }, [isEditMode, displayedCards, selectedCardId]);
+
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!selectedCardId) return;
+      if (!selectedCard) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (target?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        return;
+      }
+
+      let dx = 0;
+      let dy = 0;
+      if (event.key === 'ArrowUp') dy = -1;
+      if (event.key === 'ArrowDown') dy = 1;
+      if (event.key === 'ArrowLeft') dx = -1;
+      if (event.key === 'ArrowRight') dx = 1;
+      if (!dx && !dy) return;
+
+      event.preventDefault();
+
+      moveCard(
+        selectedCardId,
+        selectedCard.ui_config.x + dx,
+        selectedCard.ui_config.y + dy,
+        activeGroup === 'All' ? undefined : activeGroup,
+      );
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEditMode, selectedCardId, selectedCard, moveCard, activeGroup]);
 
   const handleToggleEditMode = () => {
-    if (!isEditMode && activeGroup !== 'All') {
-      setActiveGroup('All');
-    }
     toggleEditMode();
   };
-
-  const handleDragStart = (event: React.DragEvent, cardId: string, size: Card['ui_config']['size']) => {
-    setDraggingCardId(cardId);
-    const width = size.startsWith('2') ? 2 : 1;
-    const height = size.endsWith('2') ? 2 : 1;
-    setDragCardSize({ w: width, h: height });
-
-    // Required by WebKit/Safari for drag-and-drop to keep firing drop events.
-    event.dataTransfer.setData('text/plain', cardId);
-    event.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragEnd = () => {
-    setDraggingCardId(null);
-    setDragCardSize(null);
-  };
-
-  const handleDragOverCell = (event: React.DragEvent, x: number, y: number) => {
-    event.preventDefault();
-    if (!draggingCardId || !dragCardSize) return;
-
-    const valid = canPlace(x, y, dragCardSize.w, dragCardSize.h, draggingCardId);
-    event.dataTransfer.dropEffect = valid ? 'move' : 'none';
-  };
-
-  const handleDropCell = (event: React.DragEvent, x: number, y: number) => {
-    event.preventDefault();
-    if (draggingCardId && dragCardSize && canPlace(x, y, dragCardSize.w, dragCardSize.h, draggingCardId)) {
-      moveCard(draggingCardId, x, y);
-    }
-
-    handleDragEnd();
-  };
-
-  const gridCells = useMemo(() => {
-    if (!isEditMode) return null;
-
-    const cells = [];
-    for (let y = 0; y < maxRow; y += 1) {
-      for (let x = 0; x < 4; x += 1) {
-        const occupied = isOccupied(x, y, draggingCardId);
-        cells.push(
-          <div
-            key={`${x}-${y}`}
-            onDragOver={(event) => handleDragOverCell(event, x, y)}
-            onDrop={(event) => handleDropCell(event, x, y)}
-            className={`
-              border-2 rounded-lg transition-all duration-200
-              ${
-                occupied
-                  ? 'border-border/50 bg-secondary/10'
-                  : 'border-dashed border-border hover:border-primary/50 hover:bg-primary/5'
-              }
-            `}
-            style={{
-              gridColumnStart: x + 1,
-              gridColumnEnd: 'span 1',
-              gridRowStart: y + 1,
-              gridRowEnd: 'span 1',
-            }}
-          />,
-        );
-      }
-    }
-
-    return cells;
-  }, [maxRow, isEditMode, draggingCardId, displayedCards]);
 
   const renderCard = (card: Card) => {
     if (card.type === 'scalar') return <ScalarCard card={card} />;
@@ -203,11 +175,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
         </div>
       </div>
 
-      <div
-        className={`flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide shrink-0 ${
-          isEditMode ? 'opacity-50 pointer-events-none' : ''
-        }`}
-      >
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide shrink-0">
         {groups.map((group) => (
           <button
             key={group}
@@ -226,6 +194,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
         ))}
       </div>
 
+      {isEditMode && (
+        <div className="shrink-0 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm">
+          <div className="font-medium text-primary">{tr('dashboard.layoutEditHint')}</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            {selectedCard
+              ? tr('dashboard.layoutEditSelected', { title: selectedCard.title })
+              : tr('dashboard.layoutEditNoSelection')}
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 overflow-y-auto relative border border-transparent">
         {displayedCards.length === 0 && !isEditMode ? (
           <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border rounded-xl bg-card/30 mt-8">
@@ -239,16 +218,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
             className="grid grid-cols-4 auto-rows-[180px] gap-4 pb-20 relative"
             style={{ minHeight: isEditMode ? `${maxRow * 196}px` : 'auto' }}
           >
-            {gridCells}
-
             {displayedCards.map((card) => (
               <CardShell
                 key={card.id}
                 card={card}
                 isEditMode={isEditMode}
-                isDragging={draggingCardId === card.id}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
+                isSelected={selectedCardId === card.id}
+                onSelect={() => setSelectedCardId(card.id)}
                 onRefresh={() => refreshCard(card.id)}
                 onEdit={() => onEditCard(card.id)}
               >
