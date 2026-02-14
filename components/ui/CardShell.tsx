@@ -39,6 +39,9 @@ export const CardShell: React.FC<CardShellProps> = ({
 }) => {
   const { softDeleteCard, language, theme } = useStore();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  const previousRectRef = React.useRef<DOMRect | null>(null);
+  const moveAnimationRef = React.useRef<Animation | null>(null);
   const tr = (key: string) => t(language, key);
 
   const width = card.ui_config.size.startsWith('2') ? 2 : 1;
@@ -70,8 +73,52 @@ export const CardShell: React.FC<CardShellProps> = ({
         : 'bg-slate-100 text-slate-900 border-slate-300'
       : '';
 
+  React.useLayoutEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+
+    const currentRect = node.getBoundingClientRect();
+    const previousRect = previousRectRef.current;
+    previousRectRef.current = currentRect;
+
+    if (!previousRect) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const deltaX = previousRect.left - currentRect.left;
+    const deltaY = previousRect.top - currentRect.top;
+    if (!deltaX && !deltaY) return;
+
+    const distance = Math.hypot(deltaX, deltaY);
+    const duration = Math.min(520, Math.max(320, 200 + distance * 0.7));
+    const overshootFactor = 0.06;
+
+    moveAnimationRef.current?.cancel();
+    moveAnimationRef.current = node.animate(
+      [
+        { transform: `translate(${deltaX}px, ${deltaY}px)` },
+        {
+          transform: `translate(${-deltaX * overshootFactor}px, ${-deltaY * overshootFactor}px)`,
+          offset: 0.84,
+        },
+        { transform: 'translate(0px, 0px)' },
+      ],
+      {
+        duration,
+        easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)',
+      },
+    );
+  }, [card.ui_config.x, card.ui_config.y]);
+
+  React.useEffect(
+    () => () => {
+      moveAnimationRef.current?.cancel();
+    },
+    [],
+  );
+
   return (
     <div
+      ref={cardRef}
       role={isEditMode ? 'button' : undefined}
       tabIndex={isEditMode ? 0 : undefined}
       aria-pressed={isEditMode ? Boolean(isSelected) : undefined}
