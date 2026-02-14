@@ -274,7 +274,7 @@ interface AppState {
   clearRecycleBin: () => void;
   addCard: (card: Card) => void;
   updateCard: (id: string, updates: Partial<Card>) => void;
-  moveCard: (id: string, x: number, y: number, scopeGroup?: string) => void;
+  moveCard: (id: string, x: number, y: number, scopeGroup?: string) => boolean;
 
   refreshCard: (id: string) => Promise<void>;
   refreshAllCards: (reason?: 'manual' | 'start' | 'resume') => Promise<void>;
@@ -463,7 +463,9 @@ export const useStore = create<AppState>((set, get) => ({
       return { cards: recalcSortOrder(updatedCards) };
     }),
 
-  moveCard: (id, x, y, scopeGroup) =>
+  moveCard: (id, x, y, scopeGroup) => {
+    let moved = false;
+
     set((state) => {
       const card = state.cards.find((item) => item.id === id);
       if (!card || card.status.is_deleted) return { cards: state.cards };
@@ -480,6 +482,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       const blockingCards = getCollidingCards(state.cards, x, y, w, h, id, scopeGroup);
       if (blockingCards.length === 0) {
+        moved = true;
         const movedCards = state.cards.map((item) =>
           item.id === id ? setCardLayoutPosition(item, scopeGroup, { x, y }) : item,
         );
@@ -500,6 +503,7 @@ export const useStore = create<AppState>((set, get) => ({
       const sameSize = blockerSize.w === w && blockerSize.h === h;
 
       if (sameSize) {
+        moved = true;
         const swappedCards = state.cards.map((item) => {
           if (item.id === id) return setCardLayoutPosition(item, scopeGroup, blockerPosition);
           if (item.id === blocker.id) return setCardLayoutPosition(item, scopeGroup, currentPosition);
@@ -520,12 +524,16 @@ export const useStore = create<AppState>((set, get) => ({
         return { cards: state.cards };
       }
 
+      moved = true;
       const movedCards = state.cards.map((item) =>
         item.id === id ? setCardLayoutPosition(item, scopeGroup, leapTarget) : item,
       );
 
       return { cards: recalcSortOrder(movedCards) };
-    }),
+    });
+
+    return moved;
+  },
 
   refreshCard: async (id) => {
     if (inFlightCardIds.has(id)) return;

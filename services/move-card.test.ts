@@ -50,8 +50,9 @@ describe('moveCard smart collision handling', () => {
   it('swaps positions when blocked by a same-size card', () => {
     setCards([createCard('A', 0, 0, '1x1'), createCard('B', 1, 0, '1x1')]);
 
-    useStore.getState().moveCard('A', 1, 0, undefined);
+    const moved = useStore.getState().moveCard('A', 1, 0, undefined);
 
+    expect(moved).toBe(true);
     expect(getPosition('A')).toEqual({ x: 1, y: 0 });
     expect(getPosition('B')).toEqual({ x: 0, y: 0 });
   });
@@ -59,8 +60,9 @@ describe('moveCard smart collision handling', () => {
   it('jumps over a differently sized blocking card', () => {
     setCards([createCard('A', 0, 0, '1x1'), createCard('B', 1, 0, '2x1')]);
 
-    useStore.getState().moveCard('A', 1, 0, undefined);
+    const moved = useStore.getState().moveCard('A', 1, 0, undefined);
 
+    expect(moved).toBe(true);
     expect(getPosition('A')).toEqual({ x: 3, y: 0 });
     expect(getPosition('B')).toEqual({ x: 1, y: 0 });
   });
@@ -68,8 +70,9 @@ describe('moveCard smart collision handling', () => {
   it('keeps position when more than one card blocks in the move direction', () => {
     setCards([createCard('A', 0, 0, '1x1'), createCard('B', 1, 0, '2x1'), createCard('C', 3, 0, '1x1')]);
 
-    useStore.getState().moveCard('A', 1, 0, undefined);
+    const moved = useStore.getState().moveCard('A', 1, 0, undefined);
 
+    expect(moved).toBe(false);
     expect(getPosition('A')).toEqual({ x: 0, y: 0 });
     expect(getPosition('B')).toEqual({ x: 1, y: 0 });
     expect(getPosition('C')).toEqual({ x: 3, y: 0 });

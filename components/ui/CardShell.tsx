@@ -18,6 +18,7 @@ interface CardShellProps {
   children: React.ReactNode;
   isEditMode: boolean;
   isSelected?: boolean;
+  failedMoveSignal?: number;
   onSelect?: () => void;
   onRefresh?: () => void;
   onEdit?: () => void;
@@ -33,6 +34,7 @@ export const CardShell: React.FC<CardShellProps> = ({
   children,
   isEditMode,
   isSelected,
+  failedMoveSignal,
   onSelect,
   onRefresh,
   onEdit,
@@ -42,6 +44,7 @@ export const CardShell: React.FC<CardShellProps> = ({
   const cardRef = React.useRef<HTMLDivElement | null>(null);
   const previousRectRef = React.useRef<DOMRect | null>(null);
   const moveAnimationRef = React.useRef<Animation | null>(null);
+  const failedMoveAnimationRef = React.useRef<Animation | null>(null);
   const tr = (key: string) => t(language, key);
 
   const width = card.ui_config.size.startsWith('2') ? 2 : 1;
@@ -112,9 +115,35 @@ export const CardShell: React.FC<CardShellProps> = ({
   React.useEffect(
     () => () => {
       moveAnimationRef.current?.cancel();
+      failedMoveAnimationRef.current?.cancel();
     },
     [],
   );
+
+  React.useEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    if (!isEditMode || !isSelected) return;
+    if (!failedMoveSignal || failedMoveSignal < 1) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    moveAnimationRef.current?.cancel();
+    failedMoveAnimationRef.current?.cancel();
+    failedMoveAnimationRef.current = node.animate(
+      [
+        { transform: 'translate(0px, 0px) rotate(0deg)' },
+        { transform: 'translate(-5px, 0px) rotate(-2.6deg)', offset: 0.18 },
+        { transform: 'translate(5px, 0px) rotate(2.6deg)', offset: 0.36 },
+        { transform: 'translate(-3px, 0px) rotate(-1.6deg)', offset: 0.54 },
+        { transform: 'translate(3px, 0px) rotate(1.6deg)', offset: 0.72 },
+        { transform: 'translate(0px, 0px) rotate(0deg)' },
+      ],
+      {
+        duration: 300,
+        easing: 'cubic-bezier(0.36, 0.07, 0.19, 0.97)',
+      },
+    );
+  }, [failedMoveSignal, isEditMode, isSelected]);
 
   return (
     <div
@@ -140,7 +169,7 @@ export const CardShell: React.FC<CardShellProps> = ({
       }}
       className={`
         relative group bg-card text-card-foreground rounded-lg border border-border shadow-sm
-        flex flex-col overflow-hidden transition-[box-shadow,border-color,background-color] duration-150 ease-out
+        flex flex-col overflow-hidden origin-center transition-[box-shadow,border-color,background-color] duration-150 ease-out
         ${getBorderClass(card.ui_config.color_theme)}
         ${isEditMode ? 'cursor-pointer z-20 outline-none' : 'z-10'}
         ${isEditMode ? 'hover:shadow-md' : ''}

@@ -30,6 +30,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   const tr = (key: string, params?: Record<string, string | number>) => t(language, key, params);
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [failedMoveSignal, setFailedMoveSignal] = useState<{ cardId: string | null; nonce: number }>({
+    cardId: null,
+    nonce: 0,
+  });
 
   const visibleCards = useMemo(() => cards.filter((card) => !card.status.is_deleted), [cards]);
 
@@ -118,12 +122,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
 
       event.preventDefault();
 
-      moveCard(
+      const moved = moveCard(
         selectedCardId,
         selectedCard.ui_config.x + dx,
         selectedCard.ui_config.y + dy,
         activeGroup === 'All' ? undefined : activeGroup,
       );
+
+      if (!moved) {
+        setFailedMoveSignal((value) => ({ cardId: selectedCardId, nonce: value.nonce + 1 }));
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -224,6 +232,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                 card={card}
                 isEditMode={isEditMode}
                 isSelected={selectedCardId === card.id}
+                failedMoveSignal={failedMoveSignal.cardId === card.id ? failedMoveSignal.nonce : undefined}
                 onSelect={() => setSelectedCardId(card.id)}
                 onRefresh={() => refreshCard(card.id)}
                 onEdit={() => onEditCard(card.id)}
