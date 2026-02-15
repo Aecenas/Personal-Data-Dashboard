@@ -13,6 +13,9 @@ These scripts are for manual validation in Tauri mode (`npm run tauri:dev`).
 - `status_ok.py`
   - Card type: `status`
   - Expected: status card renders label/state/message
+- `gauge_ok.py`
+  - Card type: `gauge`
+  - Expected: gauge card renders min/max/value(unit) with needle position
 
 ## Mapping Case
 
@@ -43,6 +46,7 @@ These scripts are for manual validation in Tauri mode (`npm run tauri:dev`).
 - `scalar_ok.py --value 78.9 --unit "%" --trend down --color warning --jitter 2 --seed 42`
 - `series_ok.py --points 24 --step 0.5 --series-names cpu,mem,disk`
 - `status_ok.py --label redis --state critical --message "replication lag high"`
+- `gauge_ok.py --min 0 --max 100 --value 80 --unit "%" --jitter 2 --seed 7`
 - `timeout_sleep.py --sleep 20`
 - `wrong_type.py --actual-type status`
 - `stderr_nonzero.py --code 3 --stderr "mock failure"`

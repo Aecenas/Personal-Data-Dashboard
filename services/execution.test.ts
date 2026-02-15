@@ -71,6 +71,35 @@ describe('execution contract normalize', () => {
     });
   });
 
+  it('normalizes gauge payload with custom mapping', () => {
+    const payload = __testables.normalizePayload(
+      {
+        type: 'gauge',
+        data: {
+          limits: { low: 10, high: 60 },
+          current: '28.5',
+          suffix: 'MB',
+        },
+      },
+      'gauge',
+      {
+        gauge: {
+          min_key: 'limits.low',
+          max_key: 'limits.high',
+          value_key: 'current',
+          unit_key: 'suffix',
+        },
+      },
+    );
+
+    expect(payload).toEqual({
+      min: 10,
+      max: 60,
+      value: 28.5,
+      unit: 'MB',
+    });
+  });
+
   it('throws when type does not match card type', () => {
     expect(() =>
       __testables.normalizePayload(

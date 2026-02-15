@@ -1,4 +1,4 @@
-export type CardType = 'scalar' | 'series' | 'status';
+export type CardType = 'scalar' | 'series' | 'status' | 'gauge';
 
 export type RuntimeState = 'idle' | 'loading' | 'success' | 'error';
 export type AppLanguage = 'en-US' | 'zh-CN';
@@ -29,10 +29,18 @@ export interface StatusMappingConfig {
   message_key?: string;
 }
 
+export interface GaugeMappingConfig {
+  min_key: string;
+  max_key: string;
+  value_key: string;
+  unit_key?: string;
+}
+
 export interface MappingConfig {
   scalar?: ScalarMappingConfig;
   series?: SeriesMappingConfig;
   status?: StatusMappingConfig;
+  gauge?: GaugeMappingConfig;
 }
 
 export interface RefreshConfig {
@@ -85,7 +93,18 @@ export interface ScriptOutputStatus {
   message?: string;
 }
 
-export type NormalizedCardPayload = ScriptOutputScalar | ScriptOutputSeries | ScriptOutputStatus;
+export interface ScriptOutputGauge {
+  min: number;
+  max: number;
+  value: number;
+  unit?: string;
+}
+
+export type NormalizedCardPayload =
+  | ScriptOutputScalar
+  | ScriptOutputSeries
+  | ScriptOutputStatus
+  | ScriptOutputGauge;
 
 export interface CacheData {
   last_success_payload?: NormalizedCardPayload;

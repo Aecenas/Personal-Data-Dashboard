@@ -84,4 +84,30 @@ describe('storage migration', () => {
     expect(card.mapping_config.scalar?.value_key).toBe('metrics.value');
     expect(card.cache_data?.last_success_payload).toEqual({ value: 99, unit: '%' });
   });
+
+  it('keeps gauge type and default gauge mapping keys', () => {
+    const migrated = storageMigration.migrateToV1({
+      cards: [
+        {
+          id: 'gauge-1',
+          title: 'Disk usage',
+          group: 'Infra',
+          type: 'gauge',
+          script_config: {
+            path: '/tmp/disk.py',
+            args: [],
+          },
+        },
+      ],
+    });
+
+    const card = migrated.cards[0];
+    expect(card.type).toBe('gauge');
+    expect(card.mapping_config.gauge).toEqual({
+      min_key: 'min',
+      max_key: 'max',
+      value_key: 'value',
+      unit_key: 'unit',
+    });
+  });
 });

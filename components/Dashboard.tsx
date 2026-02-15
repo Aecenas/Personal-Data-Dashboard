@@ -4,6 +4,7 @@ import { CardShell } from './ui/CardShell';
 import { ScalarCard } from './cards/ScalarCard';
 import { SeriesCard } from './cards/SeriesCard';
 import { StatusCard } from './cards/StatusCard';
+import { GaugeCard } from './cards/GaugeCard';
 import { Plus, LayoutTemplate, Check, RefreshCw, X } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Card, SectionMarker } from '../types';
@@ -383,7 +384,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   const renderCard = (card: Card) => {
     if (card.type === 'scalar') return <ScalarCard card={card} />;
     if (card.type === 'series') return <SeriesCard card={card} />;
-    return <StatusCard card={card} />;
+    if (card.type === 'status') return <StatusCard card={card} />;
+    return <GaugeCard card={card} />;
   };
 
   return (

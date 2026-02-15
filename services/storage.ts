@@ -56,11 +56,22 @@ const createDefaultMapping = (cardType: Card['type']): MappingConfig => {
     };
   }
 
+  if (cardType === 'status') {
+    return {
+      status: {
+        label_key: 'label',
+        state_key: 'state',
+        message_key: 'message',
+      },
+    };
+  }
+
   return {
-    status: {
-      label_key: 'label',
-      state_key: 'state',
-      message_key: 'message',
+    gauge: {
+      min_key: 'min',
+      max_key: 'max',
+      value_key: 'value',
+      unit_key: 'unit',
     },
   };
 };
@@ -96,6 +107,15 @@ const normalizeMapping = (rawMapping: any, cardType: Card['type']): MappingConfi
       }
     : undefined;
 
+  const legacyGauge = rawMapping.min_key || rawMapping.max_key || rawMapping.value_key
+    ? {
+        min_key: rawMapping.min_key ?? 'min',
+        max_key: rawMapping.max_key ?? 'max',
+        value_key: rawMapping.value_key ?? 'value',
+        unit_key: rawMapping.unit_key ?? 'unit',
+      }
+    : undefined;
+
   return {
     scalar: {
       ...(defaults.scalar ?? {}),
@@ -111,6 +131,11 @@ const normalizeMapping = (rawMapping: any, cardType: Card['type']): MappingConfi
       ...(defaults.status ?? {}),
       ...(legacyStatus ?? {}),
       ...(rawMapping.status ?? {}),
+    },
+    gauge: {
+      ...(defaults.gauge ?? {}),
+      ...(legacyGauge ?? {}),
+      ...(rawMapping.gauge ?? {}),
     },
   };
 };
@@ -164,7 +189,10 @@ const normalizeSectionMarker = (rawMarker: any, index: number): SectionMarker =>
 
 const normalizeCard = (rawCard: any, index: number): Card => {
   const cardType: Card['type'] =
-    rawCard?.type === 'scalar' || rawCard?.type === 'series' || rawCard?.type === 'status'
+    rawCard?.type === 'scalar' ||
+    rawCard?.type === 'series' ||
+    rawCard?.type === 'status' ||
+    rawCard?.type === 'gauge'
       ? rawCard.type
       : 'scalar';
 

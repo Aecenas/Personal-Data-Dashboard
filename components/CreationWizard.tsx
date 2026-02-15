@@ -12,6 +12,7 @@ import {
   RectangleVertical,
   ShieldAlert,
   CircleDot,
+  Gauge,
   Play,
   Loader2,
   FolderOpen,
@@ -52,6 +53,10 @@ interface WizardForm {
   statusLabelKey: string;
   statusStateKey: string;
   statusMessageKey: string;
+  gaugeMinKey: string;
+  gaugeMaxKey: string;
+  gaugeValueKey: string;
+  gaugeUnitKey: string;
 }
 
 const defaultForm: WizardForm = {
@@ -78,6 +83,10 @@ const defaultForm: WizardForm = {
   statusLabelKey: 'label',
   statusStateKey: 'state',
   statusMessageKey: 'message',
+  gaugeMinKey: 'min',
+  gaugeMaxKey: 'max',
+  gaugeValueKey: 'value',
+  gaugeUnitKey: 'unit',
 };
 
 const parseArgs = (value: string) =>
@@ -103,6 +112,12 @@ const buildMappingConfig = (form: WizardForm): MappingConfig => ({
     label_key: form.statusLabelKey,
     state_key: form.statusStateKey,
     message_key: form.statusMessageKey || undefined,
+  },
+  gauge: {
+    min_key: form.gaugeMinKey,
+    max_key: form.gaugeMaxKey,
+    value_key: form.gaugeValueKey,
+    unit_key: form.gaugeUnitKey || undefined,
   },
 });
 
@@ -130,6 +145,10 @@ const createFormFromCard = (card: Card): WizardForm => ({
   statusLabelKey: card.mapping_config.status?.label_key ?? 'label',
   statusStateKey: card.mapping_config.status?.state_key ?? 'state',
   statusMessageKey: card.mapping_config.status?.message_key ?? 'message',
+  gaugeMinKey: card.mapping_config.gauge?.min_key ?? 'min',
+  gaugeMaxKey: card.mapping_config.gauge?.max_key ?? 'max',
+  gaugeValueKey: card.mapping_config.gauge?.value_key ?? 'value',
+  gaugeUnitKey: card.mapping_config.gauge?.unit_key ?? 'unit',
 });
 
 export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editingCard }) => {
@@ -181,6 +200,10 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     form.statusLabelKey,
     form.statusStateKey,
     form.statusMessageKey,
+    form.gaugeMinKey,
+    form.gaugeMaxKey,
+    form.gaugeValueKey,
+    form.gaugeUnitKey,
   ]);
 
   const updateForm = <K extends keyof WizardForm>(key: K, value: WizardForm[K]) => {
@@ -236,6 +259,12 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       if (form.type === 'status') {
         if (!form.statusLabelKey.trim() || !form.statusStateKey.trim()) {
           setValidationMessage(tr('wizard.validation.statusFields'));
+          return false;
+        }
+      }
+      if (form.type === 'gauge') {
+        if (!form.gaugeMinKey.trim() || !form.gaugeMaxKey.trim() || !form.gaugeValueKey.trim()) {
+          setValidationMessage(tr('wizard.validation.gaugeFields'));
           return false;
         }
       }
@@ -488,7 +517,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
 
       <div className="space-y-2">
         <label className="text-sm font-medium">{tr('wizard.visualizationType')}</label>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div
             className={`border rounded-lg p-4 cursor-pointer hover:bg-secondary/50 transition-colors ${
               form.type === 'scalar' ? 'border-primary bg-secondary/50' : 'border-border'
@@ -518,6 +547,16 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
             <ShieldAlert className="mb-2 text-primary" />
             <div className="font-medium">{tr('wizard.typeStatus')}</div>
             <div className="text-xs text-muted-foreground">{tr('wizard.typeStatusDesc')}</div>
+          </div>
+          <div
+            className={`border rounded-lg p-4 cursor-pointer hover:bg-secondary/50 transition-colors ${
+              form.type === 'gauge' ? 'border-primary bg-secondary/50' : 'border-border'
+            }`}
+            onClick={() => updateForm('type', 'gauge')}
+          >
+            <Gauge className="mb-2 text-primary" />
+            <div className="font-medium">{tr('wizard.typeGauge')}</div>
+            <div className="text-xs text-muted-foreground">{tr('wizard.typeGaugeDesc')}</div>
           </div>
         </div>
       </div>
@@ -644,12 +683,22 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     "series": [{ "name": "val", "values": [1, 2] }]
   }
 }`
-    : `{
+    : form.type === 'status'
+      ? `{
   "type": "status",
   "data": {
     "label": "service-A",
     "state": "ok",
     "message": "healthy"
+  }
+}`
+      : `{
+  "type": "gauge",
+  "data": {
+    "min": 0,
+    "max": 100,
+    "value": 80,
+    "unit": "%"
   }
 }`}
         </pre>
@@ -762,6 +811,43 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         </div>
       )}
 
+      {form.type === 'gauge' && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.gaugeMinKey')}</label>
+            <input
+              className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
+              value={form.gaugeMinKey}
+              onChange={(event) => updateForm('gaugeMinKey', event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.gaugeMaxKey')}</label>
+            <input
+              className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
+              value={form.gaugeMaxKey}
+              onChange={(event) => updateForm('gaugeMaxKey', event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.gaugeValueKey')}</label>
+            <input
+              className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
+              value={form.gaugeValueKey}
+              onChange={(event) => updateForm('gaugeValueKey', event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.gaugeUnitKeyOptional')}</label>
+            <input
+              className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
+              value={form.gaugeUnitKey}
+              onChange={(event) => updateForm('gaugeUnitKey', event.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="rounded-lg border border-border/70 bg-secondary/20 p-3 text-xs text-muted-foreground">
         {tr('wizard.mappingHint')}
       </div>
@@ -809,6 +895,32 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           </p>
           <p className="text-sm text-muted-foreground">
             {tr('wizard.seriesCount', { count: payload?.series?.length ?? 0 })}
+          </p>
+        </div>
+      );
+    }
+
+    if (form.type === 'gauge') {
+      const payload = testResult.payload as any;
+      const min = Number(payload?.min ?? 0);
+      const max = Number(payload?.max ?? 100);
+      const value = Number(payload?.value ?? 0);
+      const hasRange = Number.isFinite(min) && Number.isFinite(max) && max > min;
+      const percent = hasRange ? Math.round(Math.max(0, Math.min(1, (value - min) / (max - min))) * 100) : 0;
+
+      return (
+        <div className="w-full border border-cyan-500/30 bg-cyan-500/10 rounded-lg p-4 space-y-3">
+          <p className="text-xs uppercase text-cyan-300">{tr('wizard.gaugePreview')}</p>
+          <div className="flex items-end justify-between text-xs text-muted-foreground">
+            <span>{min}</span>
+            <span>{max}</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+            <div className="h-full bg-cyan-400 transition-all duration-300" style={{ width: `${percent}%` }} />
+          </div>
+          <p className="text-2xl font-bold">
+            {value}
+            {payload?.unit ? <span className="text-base ml-1 text-muted-foreground">{payload.unit}</span> : null}
           </p>
         </div>
       );

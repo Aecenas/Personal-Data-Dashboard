@@ -5,6 +5,7 @@ import {
   CardType,
   MappingConfig,
   NormalizedCardPayload,
+  ScriptOutputGauge,
   ScriptOutputScalar,
   ScriptOutputSeries,
   ScriptOutputStatus,
@@ -73,6 +74,11 @@ const readPath = (obj: unknown, path: string): unknown => {
     cursor = cursor[part];
   }
   return cursor;
+};
+
+const parseFiniteNumber = (value: unknown): number | undefined => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 };
 
 const normalizeState = (value: unknown): ScriptOutputStatus['state'] => {
@@ -174,6 +180,55 @@ const normalizeStatus = (data: unknown, mapping: MappingConfig): ScriptOutputSta
   };
 };
 
+const normalizeGauge = (data: unknown, mapping: MappingConfig): ScriptOutputGauge => {
+  const gaugeMapping = {
+    min_key: 'min',
+    max_key: 'max',
+    value_key: 'value',
+    unit_key: 'unit',
+    ...(mapping.gauge ?? {}),
+  };
+
+  const minRaw = readPath(data, gaugeMapping.min_key);
+  const maxRaw = readPath(data, gaugeMapping.max_key);
+  const valueRaw = readPath(data, gaugeMapping.value_key);
+  const unitRaw = readPath(data, gaugeMapping.unit_key);
+
+  if (minRaw === undefined || minRaw === null) {
+    throw new Error(tr('exec.mappingGaugeMinMissing', { path: gaugeMapping.min_key }));
+  }
+  if (maxRaw === undefined || maxRaw === null) {
+    throw new Error(tr('exec.mappingGaugeMaxMissing', { path: gaugeMapping.max_key }));
+  }
+  if (valueRaw === undefined || valueRaw === null) {
+    throw new Error(tr('exec.mappingGaugeValueMissing', { path: gaugeMapping.value_key }));
+  }
+
+  const min = parseFiniteNumber(minRaw);
+  const max = parseFiniteNumber(maxRaw);
+  const value = parseFiniteNumber(valueRaw);
+
+  if (min === undefined) {
+    throw new Error(tr('exec.mappingGaugeMinInvalid', { path: gaugeMapping.min_key }));
+  }
+  if (max === undefined) {
+    throw new Error(tr('exec.mappingGaugeMaxInvalid', { path: gaugeMapping.max_key }));
+  }
+  if (value === undefined) {
+    throw new Error(tr('exec.mappingGaugeValueInvalid', { path: gaugeMapping.value_key }));
+  }
+  if (max <= min) {
+    throw new Error(tr('exec.mappingGaugeRangeInvalid', { min, max }));
+  }
+
+  return {
+    min,
+    max,
+    value,
+    unit: unitRaw !== undefined && unitRaw !== null ? String(unitRaw) : undefined,
+  };
+};
+
 const normalizePayload = (output: any, type: CardType, mapping: MappingConfig): NormalizedCardPayload => {
   if (!output || typeof output !== 'object') {
     throw new Error(tr('exec.outputNotObject'));
@@ -193,7 +248,8 @@ const normalizePayload = (output: any, type: CardType, mapping: MappingConfig): 
 
   if (type === 'scalar') return normalizeScalar(output.data, mapping);
   if (type === 'series') return normalizeSeries(output.data, mapping);
-  return normalizeStatus(output.data, mapping);
+  if (type === 'status') return normalizeStatus(output.data, mapping);
+  return normalizeGauge(output.data, mapping);
 };
 
 const runScript = async (request: RunPythonScriptRequest): Promise<RunPythonScriptResponse> => {
