@@ -148,7 +148,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   const visibleCards = useMemo(() => cards.filter((card) => !card.status.is_deleted), [cards]);
   const displayedSections = useMemo(
     () =>
-      (activeGroup === 'All' ? [] : sectionMarkers.filter((section) => section.group === activeGroup))
+      sectionMarkers
+        .filter((section) => section.group === activeGroup)
         .slice()
         .sort((a, b) => {
           if (a.after_row !== b.after_row) return a.after_row - b.after_row;
@@ -160,24 +161,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
 
   const displayedCards = useMemo(
     () =>
-      (activeGroup === 'All' ? visibleCards : visibleCards.filter((card) => card.group === activeGroup)).map(
-        (card) => {
-          const position = getCardLayoutPosition(card, activeGroup);
-          if (card.ui_config.x === position.x && card.ui_config.y === position.y) return card;
-          return {
-            ...card,
-            ui_config: {
-              ...card.ui_config,
-              x: position.x,
-              y: position.y,
-            },
-          };
-        },
-      ),
+      visibleCards.filter((card) => card.group === activeGroup).map((card) => {
+        const position = getCardLayoutPosition(card, activeGroup);
+        if (card.ui_config.x === position.x && card.ui_config.y === position.y) return card;
+        return {
+          ...card,
+          ui_config: {
+            ...card.ui_config,
+            x: position.x,
+            y: position.y,
+          },
+        };
+      }),
     [activeGroup, visibleCards],
   );
 
-  const groupTabs = useMemo(() => ['All', ...groups.map((group) => group.name)], [groups]);
+  const groupTabs = useMemo(() => groups.map((group) => group.name), [groups]);
 
   const maxRow = useMemo(() => {
     let maxCardRow = 0;
@@ -257,7 +256,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
         selectedCardId,
         selectedCard.ui_config.x + dx,
         selectedCard.ui_config.y + dy,
-        activeGroup === 'All' ? undefined : activeGroup,
+        activeGroup,
       );
 
       if (!moved) {
@@ -291,11 +290,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   };
 
   const openSectionCreateDialog = () => {
-    if (activeGroup === 'All') {
-      window.alert(tr('dashboard.sectionPickGroup'));
-      return;
-    }
-
     const defaultTitle = tr('dashboard.sectionDefaultTitle', { index: displayedSections.length + 1 });
     const defaultAfterRow = selectedCard
       ? selectedCard.ui_config.y + getCardHeight(selectedCard.ui_config.size)
@@ -366,11 +360,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     if (sectionDialog.mode === 'edit' && sectionDialog.targetId) {
       updateSectionMarker(sectionDialog.targetId, normalizedPayload);
       closeSectionDialog();
-      return;
-    }
-
-    if (activeGroup === 'All') {
-      setSectionDialogError(tr('dashboard.sectionPickGroup'));
       return;
     }
 
@@ -523,7 +512,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
               }
             `}
           >
-            {group === 'All' ? tr('common.all') : group}
+            {group}
           </button>
         ))}
       </div>

@@ -44,7 +44,7 @@ const getPosition = (id: string) => {
 
 describe('moveCard smart collision handling', () => {
   beforeEach(() => {
-    useStore.setState({ cards: [], activeGroup: 'All', isEditMode: false, dashboardColumns: 4 });
+    useStore.setState({ cards: [], activeGroup: 'Default', isEditMode: false, dashboardColumns: 4 });
   });
 
   it('swaps positions when blocked by a same-size card', () => {

@@ -53,7 +53,7 @@ describe('group management store behavior', () => {
       cards: [],
       sectionMarkers: [],
       groups: createGroups('Default'),
-      activeGroup: 'All',
+      activeGroup: 'Default',
       dashboardColumns: 4,
       isEditMode: false,
     });

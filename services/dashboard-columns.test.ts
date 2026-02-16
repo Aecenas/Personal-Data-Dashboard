@@ -71,7 +71,7 @@ describe('dashboard columns', () => {
       cards: [],
       sectionMarkers: [],
       dashboardColumns: 4,
-      activeGroup: 'All',
+      activeGroup: 'Default',
       isEditMode: false,
     });
   });

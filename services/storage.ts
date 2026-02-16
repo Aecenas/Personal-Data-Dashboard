@@ -188,9 +188,12 @@ const normalizeGroupEntities = (
   }));
 };
 const normalizeActiveGroup = (value: unknown, groups: GroupEntity[]): string => {
-  if (typeof value !== 'string') return RESERVED_ALL_GROUP;
-  if (isAllGroupName(value)) return RESERVED_ALL_GROUP;
-  return groups.some((group) => group.name === value) ? value : RESERVED_ALL_GROUP;
+  const groupNames = groups.map((group) => group.name);
+  const fallback = groupNames[0] ?? DEFAULT_GROUP_NAME;
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim();
+  if (!normalized || isAllGroupName(normalized)) return fallback;
+  return groupNames.includes(normalized) ? normalized : fallback;
 };
 const normalizeCardBusinessIds = (cards: Card[], groups: GroupEntity[]): Card[] => {
   const map = groupIdByName(groups);

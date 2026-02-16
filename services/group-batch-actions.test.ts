@@ -92,7 +92,7 @@ describe('group batch actions', () => {
       cards: [],
       sectionMarkers: [],
       groups: createGroups('Infra', 'Ops'),
-      activeGroup: 'All',
+      activeGroup: 'Infra',
       dashboardColumns: 4,
       isEditMode: false,
     });

@@ -306,8 +306,11 @@ const nextGroupIdFromGroups = (groups: GroupEntity[]): string => {
 };
 
 const normalizeActiveGroup = (activeGroup: string, groups: GroupEntity[]): string => {
-  if (isAllGroupName(activeGroup)) return RESERVED_ALL_GROUP;
-  return orderedGroupNames(groups).includes(activeGroup) ? activeGroup : RESERVED_ALL_GROUP;
+  const groupNames = orderedGroupNames(groups);
+  const fallback = groupNames[0] ?? DEFAULT_GROUP_NAME;
+  const normalized = String(activeGroup ?? '').trim();
+  if (!normalized || isAllGroupName(normalized)) return fallback;
+  return groupNames.includes(normalized) ? normalized : fallback;
 };
 
 const normalizeCardGroup = (card: Card): Card => {
@@ -970,7 +973,7 @@ export const buildSettingsPayload = (state: Pick<
 export const useStore = create<AppState>((set, get) => ({
   currentView: 'dashboard',
   sidebarOpen: true,
-  activeGroup: 'All',
+  activeGroup: DEFAULT_GROUP_NAME,
   theme: 'light',
   language: 'zh-CN',
   dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
@@ -1886,9 +1889,9 @@ export const useStore = create<AppState>((set, get) => ({
           };
         });
 
-      const activeGroup = state.activeGroup === name
-        ? (target || RESERVED_ALL_GROUP)
-        : normalizeActiveGroup(state.activeGroup, groups);
+      const activeGroupCandidate =
+        state.activeGroup === name ? (target || groups[0]?.name || DEFAULT_GROUP_NAME) : state.activeGroup;
+      const activeGroup = normalizeActiveGroup(activeGroupCandidate, groups);
       const normalizedCards = normalizeCardBusinessIds(cards, groups);
 
       result = { ok: true };
