@@ -5,6 +5,7 @@ import { Button } from './ui/Button';
 import { open } from '@tauri-apps/plugin-dialog';
 import { t } from '../i18n';
 import { MAX_DASHBOARD_COLUMNS, MIN_DASHBOARD_COLUMNS } from '../grid';
+import { MAX_REFRESH_CONCURRENCY, MIN_REFRESH_CONCURRENCY } from '../refresh';
 
 export const Settings = () => {
   const {
@@ -18,9 +19,11 @@ export const Settings = () => {
     updateDataPath,
     defaultPythonPath,
     setDefaultPythonPath,
+    refreshConcurrencyLimit,
+    setRefreshConcurrencyLimit,
   } = useStore();
   const [pythonPathInput, setPythonPathInput] = useState(defaultPythonPath ?? '');
-  const tr = (key: string) => t(language, key);
+  const tr = (key: string, params?: Record<string, string | number>) => t(language, key, params);
 
   useEffect(() => {
     setPythonPathInput(defaultPythonPath ?? '');
@@ -175,6 +178,30 @@ export const Settings = () => {
                 />
                 <Button onClick={savePythonPath}>{tr('common.save')}</Button>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="font-medium">{tr('settings.maxConcurrentRuns')}</p>
+              <p className="text-sm text-muted-foreground">
+                {tr('settings.maxConcurrentRunsDesc', {
+                  min: MIN_REFRESH_CONCURRENCY,
+                  max: MAX_REFRESH_CONCURRENCY,
+                })}
+              </p>
+              <select
+                value={refreshConcurrencyLimit}
+                onChange={(event) => setRefreshConcurrencyLimit(Number.parseInt(event.target.value, 10))}
+                className="w-28 bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {Array.from(
+                  { length: MAX_REFRESH_CONCURRENCY - MIN_REFRESH_CONCURRENCY + 1 },
+                  (_, index) => MIN_REFRESH_CONCURRENCY + index,
+                ).map((limit) => (
+                  <option key={limit} value={limit}>
+                    {limit}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="rounded-lg border border-border/60 bg-secondary/20 p-3 text-xs text-muted-foreground space-y-2">

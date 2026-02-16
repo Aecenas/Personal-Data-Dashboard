@@ -62,6 +62,7 @@ describe('storage migration', () => {
     expect(migrated.schema_version).toBe(1);
     expect(migrated.language).toBe('en-US');
     expect(migrated.dashboard_columns).toBe(4);
+    expect(migrated.refresh_concurrency_limit).toBe(4);
     expect(migrated.activeGroup).toBe('Infrastructure');
     expect(migrated.cards).toHaveLength(1);
     expect(migrated.section_markers).toEqual([

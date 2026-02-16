@@ -98,6 +98,7 @@ const App: React.FC = () => {
           theme: state.theme,
           language: state.language,
           dashboard_columns: state.dashboardColumns,
+          refresh_concurrency_limit: state.refreshConcurrencyLimit,
           cards: state.cards,
           section_markers: state.sectionMarkers,
           activeGroup: state.activeGroup,

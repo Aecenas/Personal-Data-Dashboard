@@ -85,6 +85,9 @@ const translations: Record<AppLanguage, TranslationMap> = {
     'settings.defaultInterpreterPath': 'Default Interpreter Path (Optional)',
     'settings.defaultInterpreterDesc':
       'Leave empty to use system defaults (macOS/Linux: python3, Windows: python/py -3).',
+    'settings.maxConcurrentRuns': 'Max Concurrent Script Runs',
+    'settings.maxConcurrentRunsDesc':
+      'Limit script processes running at the same time ({min} to {max}). Lower values reduce CPU and memory spikes.',
     'settings.executionPriority': 'Execution priority',
     'settings.priorityCard': '1. Card-level interpreter path (if set)',
     'settings.priorityDefault': '2. Default interpreter path in settings (if set)',
@@ -291,6 +294,8 @@ const translations: Record<AppLanguage, TranslationMap> = {
     'settings.defaultInterpreterPath': '默认解释器路径（可选）',
     'settings.defaultInterpreterDesc':
       '留空时使用系统默认命令（macOS/Linux: python3，Windows: python/py -3）。',
+    'settings.maxConcurrentRuns': '脚本最大并发数',
+    'settings.maxConcurrentRunsDesc': '限制脚本同时运行数量（{min} 到 {max}）。值越小越能降低 CPU 和内存峰值。',
     'settings.executionPriority': '执行优先级',
     'settings.priorityCard': '1. 卡片级解释器路径（如设置）',
     'settings.priorityDefault': '2. 设置中的默认解释器路径（如设置）',

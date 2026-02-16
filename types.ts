@@ -162,6 +162,7 @@ export interface AppSettings {
   theme: 'dark' | 'light';
   language: AppLanguage;
   dashboard_columns: number;
+  refresh_concurrency_limit: number;
   activeGroup: string;
   cards: Card[];
   section_markers: SectionMarker[];

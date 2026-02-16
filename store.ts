@@ -4,11 +4,40 @@ import { storageService } from './services/storage';
 import { executionService } from './services/execution';
 import { ensureCardLayoutScopes, getCardLayoutPosition, setCardLayoutPosition } from './layout';
 import { clampDashboardColumns, DEFAULT_DASHBOARD_COLUMNS } from './grid';
+import { DEFAULT_REFRESH_CONCURRENCY, clampRefreshConcurrency } from './refresh';
 
 const LEGACY_SAMPLE_IDS = new Set(['1', '2', '3', '4']);
 const LEGACY_SAMPLE_TITLES = new Set(['Server CPU', 'RAM Usage', 'Traffic Trend', 'Weather Status']);
 
 const inFlightCardIds = new Set<string>();
+const refreshQueue: Array<() => void> = [];
+let activeRefreshTaskCount = 0;
+
+const drainRefreshQueue = (getConcurrencyLimit: () => number) => {
+  const limit = clampRefreshConcurrency(getConcurrencyLimit());
+  while (activeRefreshTaskCount < limit && refreshQueue.length > 0) {
+    const next = refreshQueue.shift();
+    if (!next) break;
+    next();
+  }
+};
+
+const enqueueRefreshTask = (task: () => Promise<void>, getConcurrencyLimit: () => number): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const runTask = () => {
+      activeRefreshTaskCount += 1;
+      task()
+        .then(resolve)
+        .catch(reject)
+        .finally(() => {
+          activeRefreshTaskCount = Math.max(0, activeRefreshTaskCount - 1);
+          drainRefreshQueue(getConcurrencyLimit);
+        });
+    };
+
+    refreshQueue.push(runTask);
+    drainRefreshQueue(getConcurrencyLimit);
+  });
 
 const isLegacySampleCard = (card: Card) => {
   const path = card.script_config.path.trim();
@@ -400,6 +429,7 @@ interface AppState {
   sectionMarkers: SectionMarker[];
   dataPath: string;
   defaultPythonPath?: string;
+  refreshConcurrencyLimit: number;
 
   setTheme: (theme: 'dark' | 'light') => void;
   setLanguage: (language: AppLanguage) => void;
@@ -409,6 +439,7 @@ interface AppState {
   setActiveGroup: (group: string) => void;
   toggleEditMode: () => void;
   setDefaultPythonPath: (path?: string) => void;
+  setRefreshConcurrencyLimit: (limit: number) => void;
 
   initializeStore: () => Promise<void>;
   updateDataPath: (newPath: string | null) => Promise<void>;
@@ -449,6 +480,7 @@ export const useStore = create<AppState>((set, get) => ({
   sectionMarkers: [],
   dataPath: '',
   defaultPythonPath: undefined,
+  refreshConcurrencyLimit: DEFAULT_REFRESH_CONCURRENCY,
 
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => set({ language }),
@@ -473,6 +505,7 @@ export const useStore = create<AppState>((set, get) => ({
   setActiveGroup: (group) => set({ activeGroup: group }),
   toggleEditMode: () => set((state) => ({ isEditMode: !state.isEditMode })),
   setDefaultPythonPath: (path) => set({ defaultPythonPath: path?.trim() || undefined }),
+  setRefreshConcurrencyLimit: (limit) => set({ refreshConcurrencyLimit: clampRefreshConcurrency(limit) }),
 
   initializeStore: async () => {
     if (get().isInitialized) return;
@@ -496,6 +529,7 @@ export const useStore = create<AppState>((set, get) => ({
         theme: persisted.theme,
         language: persisted.language,
         dashboardColumns,
+        refreshConcurrencyLimit: clampRefreshConcurrency(persisted.refresh_concurrency_limit),
         cards: hydratedCards,
         sectionMarkers,
         activeGroup: persisted.activeGroup,
@@ -521,6 +555,7 @@ export const useStore = create<AppState>((set, get) => ({
       theme: get().theme,
       language: get().language,
       dashboard_columns: get().dashboardColumns,
+      refresh_concurrency_limit: get().refreshConcurrencyLimit,
       activeGroup: get().activeGroup,
       cards: hydratedCards,
       section_markers: [],
@@ -780,96 +815,101 @@ export const useStore = create<AppState>((set, get) => ({
 
   refreshCard: async (id) => {
     if (inFlightCardIds.has(id)) return;
-
-    const snapshot = get();
-    const card = snapshot.cards.find((item) => item.id === id);
-    if (!card || card.status.is_deleted) return;
-
     inFlightCardIds.add(id);
+    try {
+      await enqueueRefreshTask(
+        async () => {
+          const snapshot = get();
+          const card = snapshot.cards.find((item) => item.id === id);
+          if (!card || card.status.is_deleted) return;
 
-    set((state) => ({
-      cards: state.cards.map((item) => {
-        if (item.id !== id) return item;
+          set((state) => ({
+            cards: state.cards.map((item) => {
+              if (item.id !== id) return item;
 
-        return {
-          ...item,
-          runtimeData: {
-            state: 'loading',
-            isLoading: true,
-            source: item.runtimeData?.source ?? 'none',
-            payload: item.runtimeData?.payload ?? item.cache_data?.last_success_payload,
-            error: undefined,
-            stderr: undefined,
-            exitCode: undefined,
-            durationMs: undefined,
-            lastUpdated: item.runtimeData?.lastUpdated,
-          },
-        };
-      }),
-    }));
+              return {
+                ...item,
+                runtimeData: {
+                  state: 'loading',
+                  isLoading: true,
+                  source: item.runtimeData?.source ?? 'none',
+                  payload: item.runtimeData?.payload ?? item.cache_data?.last_success_payload,
+                  error: undefined,
+                  stderr: undefined,
+                  exitCode: undefined,
+                  durationMs: undefined,
+                  lastUpdated: item.runtimeData?.lastUpdated,
+                },
+              };
+            }),
+          }));
 
-    const result = await executionService.runCard(card, snapshot.defaultPythonPath);
-    const now = Date.now();
+          const result = await executionService.runCard(card, snapshot.defaultPythonPath);
+          const now = Date.now();
 
-    set((state) => ({
-      cards: state.cards.map((item) => {
-        if (item.id !== id) return item;
+          set((state) => ({
+            cards: state.cards.map((item) => {
+              if (item.id !== id) return item;
 
-        if (result.ok && result.payload) {
-          return {
-            ...item,
-            cache_data: {
-              ...item.cache_data,
-              last_success_payload: result.payload,
-              last_success_at: now,
-              last_error: undefined,
-              last_error_at: undefined,
-              raw_stdout_excerpt: result.rawStdout?.slice(0, 500),
-              stderr_excerpt: result.rawStderr?.slice(0, 500),
-              last_exit_code: result.exitCode,
-              last_duration_ms: result.durationMs,
-            },
-            runtimeData: {
-              state: 'success',
-              isLoading: false,
-              source: 'live',
-              payload: result.payload,
-              error: undefined,
-              stderr: result.rawStderr,
-              exitCode: result.exitCode,
-              durationMs: result.durationMs,
-              lastUpdated: now,
-            },
-          };
-        }
+              if (result.ok && result.payload) {
+                return {
+                  ...item,
+                  cache_data: {
+                    ...item.cache_data,
+                    last_success_payload: result.payload,
+                    last_success_at: now,
+                    last_error: undefined,
+                    last_error_at: undefined,
+                    raw_stdout_excerpt: result.rawStdout?.slice(0, 500),
+                    stderr_excerpt: result.rawStderr?.slice(0, 500),
+                    last_exit_code: result.exitCode,
+                    last_duration_ms: result.durationMs,
+                  },
+                  runtimeData: {
+                    state: 'success',
+                    isLoading: false,
+                    source: 'live',
+                    payload: result.payload,
+                    error: undefined,
+                    stderr: result.rawStderr,
+                    exitCode: result.exitCode,
+                    durationMs: result.durationMs,
+                    lastUpdated: now,
+                  },
+                };
+              }
 
-        return {
-          ...item,
-          cache_data: {
-            ...item.cache_data,
-            last_error: result.error,
-            last_error_at: now,
-            raw_stdout_excerpt: result.rawStdout?.slice(0, 500),
-            stderr_excerpt: result.rawStderr?.slice(0, 500),
-            last_exit_code: result.exitCode,
-            last_duration_ms: result.durationMs,
-          },
-          runtimeData: {
-            state: 'error',
-            isLoading: false,
-            source: item.cache_data?.last_success_payload ? 'cache' : 'none',
-            payload: item.cache_data?.last_success_payload,
-            error: result.error,
-            stderr: result.rawStderr,
-            exitCode: result.exitCode,
-            durationMs: result.durationMs,
-            lastUpdated: now,
-          },
-        };
-      }),
-    }));
-
-    inFlightCardIds.delete(id);
+              return {
+                ...item,
+                cache_data: {
+                  ...item.cache_data,
+                  last_error: result.error,
+                  last_error_at: now,
+                  raw_stdout_excerpt: result.rawStdout?.slice(0, 500),
+                  stderr_excerpt: result.rawStderr?.slice(0, 500),
+                  last_exit_code: result.exitCode,
+                  last_duration_ms: result.durationMs,
+                },
+                runtimeData: {
+                  state: 'error',
+                  isLoading: false,
+                  source: item.cache_data?.last_success_payload ? 'cache' : 'none',
+                  payload: item.cache_data?.last_success_payload,
+                  error: result.error,
+                  stderr: result.rawStderr,
+                  exitCode: result.exitCode,
+                  durationMs: result.durationMs,
+                  lastUpdated: now,
+                },
+              };
+            }),
+          }));
+        },
+        () => get().refreshConcurrencyLimit,
+      );
+    } finally {
+      inFlightCardIds.delete(id);
+    }
   },
 
   refreshAllCards: async (reason = 'manual') => {

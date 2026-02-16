@@ -10,6 +10,7 @@ import {
 import { t } from '../i18n';
 import { ensureCardLayoutScopes } from '../layout';
 import { clampDashboardColumns } from '../grid';
+import { clampRefreshConcurrency } from '../refresh';
 
 const POINTER_FILENAME = 'storage_config.json';
 const DATA_FILENAME = 'user_settings.json';
@@ -256,6 +257,7 @@ const migrateToV1 = (input: any): AppSettings => {
     theme: input?.theme === 'light' ? 'light' : 'dark',
     language: normalizeLanguage(input?.language),
     dashboard_columns,
+    refresh_concurrency_limit: clampRefreshConcurrency(input?.refresh_concurrency_limit),
     activeGroup: typeof input?.activeGroup === 'string' ? input.activeGroup : 'All',
     cards,
     section_markers: sectionMarkers,
@@ -266,6 +268,9 @@ const migrateToV1 = (input: any): AppSettings => {
 
 const sanitizeForSave = (settings: AppSettings): AppSettings => {
   const dashboard_columns = clampDashboardColumns((settings as Partial<AppSettings>).dashboard_columns);
+  const refresh_concurrency_limit = clampRefreshConcurrency(
+    (settings as Partial<AppSettings>).refresh_concurrency_limit,
+  );
   const cards = settings.cards.map((card, index) => {
     const normalizedCard = ensureCardLayoutScopes(card);
     return {
@@ -293,6 +298,7 @@ const sanitizeForSave = (settings: AppSettings): AppSettings => {
     theme: settings.theme === 'light' ? 'light' : 'dark',
     language: normalizeLanguage((settings as Partial<AppSettings>).language),
     dashboard_columns,
+    refresh_concurrency_limit,
     activeGroup: typeof settings.activeGroup === 'string' ? settings.activeGroup : 'All',
     section_markers,
     default_python_path: settings.default_python_path,
