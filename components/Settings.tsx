@@ -15,6 +15,8 @@ export const Settings = () => {
     setLanguage,
     dashboardColumns,
     setDashboardColumns,
+    adaptiveWindowEnabled,
+    setAdaptiveWindowEnabled,
     dataPath,
     updateDataPath,
     defaultPythonPath,
@@ -128,6 +130,24 @@ export const Settings = () => {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="font-medium">{tr('settings.adaptiveWindow')}</p>
+              <p className="text-xs text-muted-foreground">{tr('settings.adaptiveWindowDesc')}</p>
+            </div>
+            <label className="inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={adaptiveWindowEnabled}
+                onChange={(event) => setAdaptiveWindowEnabled(event.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="relative w-11 h-6 bg-secondary border border-border rounded-full peer peer-checked:bg-primary/70 peer-checked:border-primary/50 transition-colors">
+                <span className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-background shadow transition-transform peer-checked:translate-x-5" />
+              </div>
+            </label>
           </div>
         </div>
 

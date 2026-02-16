@@ -27,6 +27,7 @@ const getLanguage = (): AppLanguage =>
 const tr = (key: string) => t(getLanguage(), key);
 
 const normalizeLanguage = (value: unknown): AppLanguage => (value === 'zh-CN' ? 'zh-CN' : 'en-US');
+const normalizeAdaptiveWindowEnabled = (value: unknown): boolean => value !== false;
 
 const defaultRefreshConfig: RefreshConfig = {
   interval_sec: 0,
@@ -257,6 +258,7 @@ const migrateToV1 = (input: any): AppSettings => {
     theme: input?.theme === 'light' ? 'light' : 'dark',
     language: normalizeLanguage(input?.language),
     dashboard_columns,
+    adaptive_window_enabled: normalizeAdaptiveWindowEnabled(input?.adaptive_window_enabled),
     refresh_concurrency_limit: clampRefreshConcurrency(input?.refresh_concurrency_limit),
     activeGroup: typeof input?.activeGroup === 'string' ? input.activeGroup : 'All',
     cards,
@@ -298,6 +300,7 @@ const sanitizeForSave = (settings: AppSettings): AppSettings => {
     theme: settings.theme === 'light' ? 'light' : 'dark',
     language: normalizeLanguage((settings as Partial<AppSettings>).language),
     dashboard_columns,
+    adaptive_window_enabled: normalizeAdaptiveWindowEnabled((settings as Partial<AppSettings>).adaptive_window_enabled),
     refresh_concurrency_limit,
     activeGroup: typeof settings.activeGroup === 'string' ? settings.activeGroup : 'All',
     section_markers,

@@ -9,14 +9,83 @@ import { storageService } from './services/storage';
 import { clampDashboardColumns, DEFAULT_DASHBOARD_COLUMNS } from './grid';
 
 const DEFAULT_WINDOW_WIDTH = 1380;
+const WINDOW_MIN_WIDTH = 730;
 const SIDEBAR_EXPANDED_WIDTH = 256;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
 const DEFAULT_RIGHT_WIDTH_EXPANDED = DEFAULT_WINDOW_WIDTH - SIDEBAR_EXPANDED_WIDTH;
 const DEFAULT_RIGHT_WIDTH_COLLAPSED = DEFAULT_WINDOW_WIDTH - SIDEBAR_COLLAPSED_WIDTH;
 const WINDOW_MIN_HEIGHT = 720;
 const WINDOW_DEFAULT_HEIGHT = 860;
+const BASELINE_MONITOR_WIDTH = 1920;
+const BASELINE_MONITOR_HEIGHT = 1080;
+const MIN_WINDOW_WIDTH_ABSOLUTE = 620;
+const MIN_WINDOW_HEIGHT_ABSOLUTE = 500;
+const MAX_WORKAREA_USAGE_RATIO = 0.96;
+const MIN_SCREEN_SCALE = 0.72;
+const MAX_SCREEN_SCALE = 1.7;
 
 const isTauri = () => typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+interface WindowSizingOptions {
+  columns: number;
+  sidebarOpen: boolean;
+  adaptiveWindowEnabled: boolean;
+  currentHeight: number;
+  workAreaWidth: number;
+  workAreaHeight: number;
+}
+
+const calculateWindowSize = ({
+  columns,
+  sidebarOpen,
+  adaptiveWindowEnabled,
+  currentHeight,
+  workAreaWidth,
+  workAreaHeight,
+}: WindowSizingOptions) => {
+  const sidebarWidth = sidebarOpen ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH;
+  const baselineRightWidth = sidebarOpen ? DEFAULT_RIGHT_WIDTH_EXPANDED : DEFAULT_RIGHT_WIDTH_COLLAPSED;
+  const baselineMinRightWidth = WINDOW_MIN_WIDTH - sidebarWidth;
+  const rightWidthScale = columns / DEFAULT_DASHBOARD_COLUMNS;
+  const adaptiveScreenScale = adaptiveWindowEnabled
+    ? clamp(
+        Math.min(workAreaWidth / BASELINE_MONITOR_WIDTH, workAreaHeight / BASELINE_MONITOR_HEIGHT),
+        MIN_SCREEN_SCALE,
+        MAX_SCREEN_SCALE,
+      )
+    : 1;
+
+  const maxWidth = Math.max(MIN_WINDOW_WIDTH_ABSOLUTE, Math.floor(workAreaWidth * MAX_WORKAREA_USAGE_RATIO));
+  const maxHeight = Math.max(MIN_WINDOW_HEIGHT_ABSOLUTE, Math.floor(workAreaHeight * MAX_WORKAREA_USAGE_RATIO));
+  const minWidth = clamp(
+    Math.round(sidebarWidth + baselineMinRightWidth * adaptiveScreenScale),
+    MIN_WINDOW_WIDTH_ABSOLUTE,
+    maxWidth,
+  );
+  const minHeight = clamp(
+    Math.round(WINDOW_MIN_HEIGHT * adaptiveScreenScale),
+    MIN_WINDOW_HEIGHT_ABSOLUTE,
+    maxHeight,
+  );
+  const targetWidth = clamp(
+    Math.round(sidebarWidth + baselineRightWidth * rightWidthScale * adaptiveScreenScale),
+    minWidth,
+    maxWidth,
+  );
+  const targetHeight = clamp(
+    Math.round(Math.max(currentHeight, WINDOW_DEFAULT_HEIGHT * adaptiveScreenScale)),
+    minHeight,
+    maxHeight,
+  );
+
+  return {
+    minWidth,
+    minHeight,
+    targetWidth,
+    targetHeight,
+  };
+};
 
 const App: React.FC = () => {
   const {
@@ -28,6 +97,7 @@ const App: React.FC = () => {
     isInitialized,
     cards,
     dashboardColumns,
+    adaptiveWindowEnabled,
     refreshAllCards,
     refreshCard,
   } = useStore();
@@ -63,29 +133,90 @@ const App: React.FC = () => {
     if (!isTauri()) return;
 
     const columns = clampDashboardColumns(dashboardColumns);
-    const sidebarWidth = sidebarOpen ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH;
-    const baselineRightWidth = sidebarOpen ? DEFAULT_RIGHT_WIDTH_EXPANDED : DEFAULT_RIGHT_WIDTH_COLLAPSED;
-    const rightWidthScale = columns / DEFAULT_DASHBOARD_COLUMNS;
-    const targetRightWidth = Math.round(baselineRightWidth * rightWidthScale);
-    const targetWidth = sidebarWidth + targetRightWidth;
+    let disposed = false;
+    let resizeQueued = false;
+    let resizing = false;
+    let moveResizeTimer: ReturnType<typeof setTimeout> | null = null;
+    let unlistenScaleChanged: (() => void) | undefined;
+    let unlistenMoved: (() => void) | undefined;
 
-    const resizeWindow = async () => {
+    const resizeWindow = async (): Promise<void> => {
       try {
-        const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
+        const { getCurrentWindow, LogicalSize, currentMonitor } = await import('@tauri-apps/api/window');
         const appWindow = getCurrentWindow();
+        const [fullscreen, maximized] = await Promise.all([appWindow.isFullscreen(), appWindow.isMaximized()]);
+        if (fullscreen || maximized) return;
+        const monitor = await currentMonitor();
+        const scaleFactor = monitor?.scaleFactor || (await appWindow.scaleFactor()) || 1;
+        const innerSize = await appWindow.innerSize();
+        const currentLogicalWidth = innerSize.width / scaleFactor;
+        const currentLogicalHeight = innerSize.height / scaleFactor;
+        const fallbackWorkAreaWidth = currentLogicalWidth;
+        const fallbackWorkAreaHeight = currentLogicalHeight;
+        const workAreaWidth = monitor ? monitor.workArea.size.width / scaleFactor : fallbackWorkAreaWidth;
+        const workAreaHeight = monitor ? monitor.workArea.size.height / scaleFactor : fallbackWorkAreaHeight;
+        const { minWidth, minHeight, targetWidth, targetHeight } = calculateWindowSize({
+          columns,
+          sidebarOpen,
+          adaptiveWindowEnabled,
+          currentHeight: currentLogicalHeight,
+          workAreaWidth,
+          workAreaHeight,
+        });
 
-        await appWindow.setMinSize(new LogicalSize(targetWidth, WINDOW_MIN_HEIGHT));
-
-        const outerSize = await appWindow.outerSize();
-        const targetHeight = Math.max(outerSize.height, WINDOW_DEFAULT_HEIGHT, WINDOW_MIN_HEIGHT);
+        await appWindow.setMinSize(new LogicalSize(minWidth, minHeight));
         await appWindow.setSize(new LogicalSize(targetWidth, targetHeight));
       } catch (error) {
         console.error('Failed to update window size for dashboard columns', error);
       }
     };
 
-    resizeWindow();
-  }, [dashboardColumns, sidebarOpen]);
+    const requestResize = async () => {
+      if (disposed) return;
+      if (resizing) {
+        resizeQueued = true;
+        return;
+      }
+      resizing = true;
+      do {
+        resizeQueued = false;
+        await resizeWindow();
+      } while (resizeQueued && !disposed);
+      resizing = false;
+    };
+
+    const setupWindowListeners = async () => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        const appWindow = getCurrentWindow();
+
+        if (adaptiveWindowEnabled) {
+          unlistenScaleChanged = await appWindow.onScaleChanged(() => {
+            void requestResize();
+          });
+
+          unlistenMoved = await appWindow.onMoved(() => {
+            if (moveResizeTimer) clearTimeout(moveResizeTimer);
+            moveResizeTimer = setTimeout(() => {
+              void requestResize();
+            }, 200);
+          });
+        }
+      } catch (error) {
+        console.error('Failed to bind window resize listeners', error);
+      }
+    };
+
+    void requestResize();
+    void setupWindowListeners();
+
+    return () => {
+      disposed = true;
+      if (moveResizeTimer) clearTimeout(moveResizeTimer);
+      unlistenScaleChanged?.();
+      unlistenMoved?.();
+    };
+  }, [dashboardColumns, sidebarOpen, adaptiveWindowEnabled]);
 
   useEffect(() => {
     const unsub = useStore.subscribe((state) => {
@@ -98,6 +229,7 @@ const App: React.FC = () => {
           theme: state.theme,
           language: state.language,
           dashboard_columns: state.dashboardColumns,
+          adaptive_window_enabled: state.adaptiveWindowEnabled,
           refresh_concurrency_limit: state.refreshConcurrencyLimit,
           cards: state.cards,
           section_markers: state.sectionMarkers,

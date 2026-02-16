@@ -72,6 +72,9 @@ const translations: Record<AppLanguage, TranslationMap> = {
     'settings.languageDesc': 'Choose the language used across the application.',
     'settings.dashboardColumns': 'Dashboard Columns',
     'settings.dashboardColumnsDesc': 'Set dashboard column count (2 to 6).',
+    'settings.adaptiveWindow': 'Adaptive Window Size',
+    'settings.adaptiveWindowDesc':
+      'Automatically adjusts window size to fit different monitor resolutions and scaling.',
     'settings.languageEnglish': 'English',
     'settings.languageChinese': 'Simplified Chinese',
     'settings.storage': 'Storage',
@@ -282,6 +285,8 @@ const translations: Record<AppLanguage, TranslationMap> = {
     'settings.languageDesc': '选择整个应用使用的语言。',
     'settings.dashboardColumns': '仪表盘列数',
     'settings.dashboardColumnsDesc': '设置仪表盘列数（2 到 6 列）。',
+    'settings.adaptiveWindow': '自适应窗口大小',
+    'settings.adaptiveWindowDesc': '根据当前显示器分辨率与缩放，自动调整窗口尺寸。',
     'settings.languageEnglish': '英文',
     'settings.languageChinese': '简体中文',
     'settings.storage': '存储',

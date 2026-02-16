@@ -425,6 +425,7 @@ interface AppState {
   theme: 'dark' | 'light';
   language: AppLanguage;
   dashboardColumns: number;
+  adaptiveWindowEnabled: boolean;
   cards: Card[];
   sectionMarkers: SectionMarker[];
   dataPath: string;
@@ -434,6 +435,7 @@ interface AppState {
   setTheme: (theme: 'dark' | 'light') => void;
   setLanguage: (language: AppLanguage) => void;
   setDashboardColumns: (columns: number) => void;
+  setAdaptiveWindowEnabled: (enabled: boolean) => void;
   setView: (view: ViewMode) => void;
   toggleSidebar: () => void;
   setActiveGroup: (group: string) => void;
@@ -474,6 +476,7 @@ export const useStore = create<AppState>((set, get) => ({
   theme: 'dark',
   language: 'en-US',
   dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
+  adaptiveWindowEnabled: true,
   isEditMode: false,
   isInitialized: false,
   cards: [],
@@ -500,6 +503,7 @@ export const useStore = create<AppState>((set, get) => ({
         sectionMarkers,
       };
     }),
+  setAdaptiveWindowEnabled: (enabled) => set({ adaptiveWindowEnabled: Boolean(enabled) }),
   setView: (view) => set({ currentView: view }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setActiveGroup: (group) => set({ activeGroup: group }),
@@ -529,6 +533,7 @@ export const useStore = create<AppState>((set, get) => ({
         theme: persisted.theme,
         language: persisted.language,
         dashboardColumns,
+        adaptiveWindowEnabled: persisted.adaptive_window_enabled,
         refreshConcurrencyLimit: clampRefreshConcurrency(persisted.refresh_concurrency_limit),
         cards: hydratedCards,
         sectionMarkers,
@@ -555,6 +560,7 @@ export const useStore = create<AppState>((set, get) => ({
       theme: get().theme,
       language: get().language,
       dashboard_columns: get().dashboardColumns,
+      adaptive_window_enabled: get().adaptiveWindowEnabled,
       refresh_concurrency_limit: get().refreshConcurrencyLimit,
       activeGroup: get().activeGroup,
       cards: hydratedCards,
