@@ -144,8 +144,8 @@ export const Settings = () => {
                 onChange={(event) => setAdaptiveWindowEnabled(event.target.checked)}
                 className="sr-only peer"
               />
-              <div className="relative w-11 h-6 bg-secondary border border-border rounded-full peer peer-checked:bg-primary/70 peer-checked:border-primary/50 transition-colors">
-                <span className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-background shadow transition-transform peer-checked:translate-x-5" />
+              <div className="relative w-11 h-6 rounded-full border border-border/70 bg-secondary/80 shadow-inner transition-colors peer-checked:bg-emerald-500 peer-checked:border-emerald-500/80">
+                <span className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] transition-transform peer-checked:translate-x-5" />
               </div>
             </label>
           </div>
