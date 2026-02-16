@@ -10,6 +10,7 @@ import { Button } from './ui/Button';
 import { Card, SectionMarker } from '../types';
 import { t } from '../i18n';
 import { getCardLayoutPosition } from '../layout';
+import { CardHistoryDialog } from './CardHistoryDialog';
 
 interface DashboardProps {
   onAddClick: () => void;
@@ -130,6 +131,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     cardId: null,
     nonce: 0,
   });
+  const [historyCardId, setHistoryCardId] = useState<string | null>(null);
   const [sectionDialog, setSectionDialog] = useState<SectionDialogState | null>(null);
   const [sectionDialogError, setSectionDialogError] = useState<string>('');
 
@@ -188,6 +190,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     () => displayedCards.find((card) => card.id === selectedCardId) ?? null,
     [displayedCards, selectedCardId],
   );
+  const historyCard = useMemo(
+    () => visibleCards.find((card) => card.id === historyCardId) ?? null,
+    [visibleCards, historyCardId],
+  );
 
   useEffect(() => {
     if (!isEditMode) {
@@ -210,6 +216,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
       setSelectedCardId(displayedCards[0].id);
     }
   }, [isEditMode, displayedCards, selectedCardId]);
+
+  useEffect(() => {
+    if (historyCardId && !historyCard) {
+      setHistoryCardId(null);
+    }
+  }, [historyCardId, historyCard]);
 
   useEffect(() => {
     if (!isEditMode) return;
@@ -624,6 +636,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                 onSelect={() => setSelectedCardId(card.id)}
                 onRefresh={() => refreshCard(card.id)}
                 onEdit={() => onEditCard(card.id)}
+                onHistory={() => setHistoryCardId(card.id)}
               >
                 {renderCard(card)}
               </CardShell>
@@ -758,6 +771,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
           </div>
         </div>
       )}
+
+      <CardHistoryDialog card={historyCard} onClose={() => setHistoryCardId(null)} />
     </div>
   );
 };

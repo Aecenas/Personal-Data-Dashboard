@@ -1,10 +1,25 @@
 import { create } from 'zustand';
 import { Card, CardRuntimeData, AppSettings, ViewMode, AppLanguage, SectionMarker } from './types';
-import { storageService } from './services/storage';
+import { storageService, STORAGE_SCHEMA_VERSION } from './services/storage';
 import { executionService } from './services/execution';
+import {
+  AlertTriggerEvent,
+  evaluateCardAlert,
+  normalizeAlertConfig,
+  normalizeAlertState,
+} from './services/alerts';
+import { notificationService } from './services/notification';
+import {
+  clampExecutionHistoryLimit,
+  DEFAULT_EXECUTION_HISTORY_LIMIT,
+  appendExecutionHistoryEntry,
+  summarizeExecutionError,
+  withExecutionHistoryCapacity,
+} from './services/diagnostics';
 import { ensureCardLayoutScopes, getCardLayoutPosition, setCardLayoutPosition } from './layout';
 import { clampDashboardColumns, DEFAULT_DASHBOARD_COLUMNS } from './grid';
 import { DEFAULT_REFRESH_CONCURRENCY, clampRefreshConcurrency } from './refresh';
+import { t } from './i18n';
 
 const LEGACY_SAMPLE_IDS = new Set(['1', '2', '3', '4']);
 const LEGACY_SAMPLE_TITLES = new Set(['Server CPU', 'RAM Usage', 'Traffic Trend', 'Weather Status']);
@@ -347,6 +362,7 @@ const hydrateRuntimeData = (card: Card): Card => {
       isLoading: false,
       source: 'cache',
       payload: cachedPayload,
+      thresholdAlertTriggered: false,
       lastUpdated: card.cache_data?.last_success_at,
       error: card.cache_data?.last_error,
       stderr: card.cache_data?.stderr_excerpt,
@@ -364,6 +380,7 @@ const hydrateRuntimeData = (card: Card): Card => {
         state: 'error',
         isLoading: false,
         source: 'cache',
+        thresholdAlertTriggered: false,
         error: card.cache_data.last_error,
         stderr: card.cache_data.stderr_excerpt,
         exitCode: card.cache_data.last_exit_code,
@@ -379,11 +396,66 @@ const hydrateRuntimeData = (card: Card): Card => {
       state: 'idle',
       isLoading: false,
       source: 'none',
+      thresholdAlertTriggered: false,
     },
   };
 };
 
+const formatAlertNumber = (value: number): string => {
+  if (!Number.isFinite(value)) return String(value);
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/\.?0+$/, '');
+};
+
+const statusStateLabel = (language: AppLanguage, state: string | undefined): string => {
+  if (!state) return '-';
+  if (state === 'ok' || state === 'warning' || state === 'error' || state === 'unknown') {
+    return t(language, `alerts.state.${state}`);
+  }
+  return state;
+};
+
+const buildAlertNotificationBody = (
+  language: AppLanguage,
+  cardTitle: string,
+  event: AlertTriggerEvent,
+) => {
+  if (event.reason === 'status_change') {
+    return t(language, 'alerts.statusChangedBody', {
+      cardTitle,
+      from: statusStateLabel(language, event.fromState),
+      to: statusStateLabel(language, event.toState),
+    });
+  }
+
+  if (event.reason === 'upper_threshold') {
+    return t(language, 'alerts.upperThresholdBody', {
+      cardTitle,
+      value: formatAlertNumber(event.value ?? NaN),
+      threshold: formatAlertNumber(event.threshold ?? NaN),
+    });
+  }
+
+  return t(language, 'alerts.lowerThresholdBody', {
+    cardTitle,
+    value: formatAlertNumber(event.value ?? NaN),
+    threshold: formatAlertNumber(event.threshold ?? NaN),
+  });
+};
+
 const mergeCard = (current: Card, updates: Partial<Card>): Card => {
+  const baseAlertState = normalizeAlertState(current.alert_state);
+  const mergedAlertState = updates.alert_state
+    ? {
+        ...baseAlertState,
+        ...updates.alert_state,
+        condition_last_trigger_at: {
+          ...baseAlertState.condition_last_trigger_at,
+          ...(updates.alert_state.condition_last_trigger_at ?? {}),
+        },
+      }
+    : current.alert_state;
+
   return {
     ...current,
     ...updates,
@@ -407,6 +479,13 @@ const mergeCard = (current: Card, updates: Partial<Card>): Card => {
       ...current.status,
       ...(updates.status ?? {}),
     },
+    alert_config: updates.alert_config
+      ? {
+          ...normalizeAlertConfig(current.alert_config),
+          ...updates.alert_config,
+        }
+      : current.alert_config,
+    alert_state: mergedAlertState,
     cache_data: {
       ...current.cache_data,
       ...(updates.cache_data ?? {}),
@@ -431,6 +510,7 @@ interface AppState {
   dataPath: string;
   defaultPythonPath?: string;
   refreshConcurrencyLimit: number;
+  executionHistoryLimit: number;
 
   setTheme: (theme: 'dark' | 'light') => void;
   setLanguage: (language: AppLanguage) => void;
@@ -442,6 +522,7 @@ interface AppState {
   toggleEditMode: () => void;
   setDefaultPythonPath: (path?: string) => void;
   setRefreshConcurrencyLimit: (limit: number) => void;
+  setExecutionHistoryLimit: (limit: number) => void;
 
   initializeStore: () => Promise<void>;
   updateDataPath: (newPath: string | null) => Promise<void>;
@@ -484,6 +565,7 @@ export const useStore = create<AppState>((set, get) => ({
   dataPath: '',
   defaultPythonPath: undefined,
   refreshConcurrencyLimit: DEFAULT_REFRESH_CONCURRENCY,
+  executionHistoryLimit: DEFAULT_EXECUTION_HISTORY_LIMIT,
 
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => set({ language }),
@@ -510,6 +592,25 @@ export const useStore = create<AppState>((set, get) => ({
   toggleEditMode: () => set((state) => ({ isEditMode: !state.isEditMode })),
   setDefaultPythonPath: (path) => set({ defaultPythonPath: path?.trim() || undefined }),
   setRefreshConcurrencyLimit: (limit) => set({ refreshConcurrencyLimit: clampRefreshConcurrency(limit) }),
+  setExecutionHistoryLimit: (limit) =>
+    set((state) => {
+      const normalizedLimit = clampExecutionHistoryLimit(limit);
+      if (normalizedLimit === state.executionHistoryLimit) return {};
+
+      const cards = state.cards.map((card) => {
+        if (!card.execution_history) return card;
+        const executionHistory = withExecutionHistoryCapacity(card.execution_history, normalizedLimit);
+        return {
+          ...card,
+          execution_history: executionHistory.size > 0 ? executionHistory : undefined,
+        };
+      });
+
+      return {
+        executionHistoryLimit: normalizedLimit,
+        cards,
+      };
+    }),
 
   initializeStore: async () => {
     if (get().isInitialized) return;
@@ -535,6 +636,7 @@ export const useStore = create<AppState>((set, get) => ({
         dashboardColumns,
         adaptiveWindowEnabled: persisted.adaptive_window_enabled,
         refreshConcurrencyLimit: clampRefreshConcurrency(persisted.refresh_concurrency_limit),
+        executionHistoryLimit: clampExecutionHistoryLimit(persisted.execution_history_limit),
         cards: hydratedCards,
         sectionMarkers,
         activeGroup: persisted.activeGroup,
@@ -556,12 +658,13 @@ export const useStore = create<AppState>((set, get) => ({
 
     const hydratedCards = recalcSortOrder([]);
     const initialSettings: AppSettings = {
-      schema_version: 1,
+      schema_version: STORAGE_SCHEMA_VERSION,
       theme: get().theme,
       language: get().language,
       dashboard_columns: get().dashboardColumns,
       adaptive_window_enabled: get().adaptiveWindowEnabled,
       refresh_concurrency_limit: get().refreshConcurrencyLimit,
+      execution_history_limit: get().executionHistoryLimit,
       activeGroup: get().activeGroup,
       cards: hydratedCards,
       section_markers: [],
@@ -664,6 +767,8 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const card = ensureCardLayoutScopes({
         ...incomingCard,
+        alert_config: normalizeAlertConfig(incomingCard.alert_config),
+        alert_state: normalizeAlertState(incomingCard.alert_state),
         status: {
           ...incomingCard.status,
           is_deleted: false,
@@ -840,6 +945,7 @@ export const useStore = create<AppState>((set, get) => ({
                   isLoading: true,
                   source: item.runtimeData?.source ?? 'none',
                   payload: item.runtimeData?.payload ?? item.cache_data?.last_success_payload,
+                  thresholdAlertTriggered: false,
                   error: undefined,
                   stderr: undefined,
                   exitCode: undefined,
@@ -852,12 +958,39 @@ export const useStore = create<AppState>((set, get) => ({
 
           const result = await executionService.runCard(card, snapshot.defaultPythonPath);
           const now = Date.now();
+          const pendingNotifications: Array<{ title: string; body: string }> = [];
 
           set((state) => ({
             cards: state.cards.map((item) => {
               if (item.id !== id) return item;
 
               if (result.ok && result.payload) {
+                const alertEvaluation = evaluateCardAlert({
+                  cardType: item.type,
+                  payload: result.payload,
+                  config: item.alert_config,
+                  state: item.alert_state,
+                  now,
+                });
+                const thresholdTriggered = alertEvaluation.events.some(
+                  (event) => event.reason === 'upper_threshold' || event.reason === 'lower_threshold',
+                );
+
+                alertEvaluation.events.forEach((event) => {
+                  pendingNotifications.push({
+                    title: t(snapshot.language, 'alerts.notificationTitle', { cardTitle: item.title }),
+                    body: buildAlertNotificationBody(snapshot.language, item.title, event),
+                  });
+                });
+
+                const executionHistoryEntry = {
+                  executed_at: now,
+                  duration_ms: result.durationMs,
+                  ok: true,
+                  timed_out: result.timedOut,
+                  exit_code: result.exitCode,
+                };
+
                 return {
                   ...item,
                   cache_data: {
@@ -871,11 +1004,18 @@ export const useStore = create<AppState>((set, get) => ({
                     last_exit_code: result.exitCode,
                     last_duration_ms: result.durationMs,
                   },
+                  execution_history: appendExecutionHistoryEntry(
+                    withExecutionHistoryCapacity(item.execution_history, snapshot.executionHistoryLimit),
+                    executionHistoryEntry,
+                    snapshot.executionHistoryLimit,
+                  ),
+                  alert_state: alertEvaluation.nextState,
                   runtimeData: {
                     state: 'success',
                     isLoading: false,
                     source: 'live',
                     payload: result.payload,
+                    thresholdAlertTriggered: thresholdTriggered,
                     error: undefined,
                     stderr: result.rawStderr,
                     exitCode: result.exitCode,
@@ -884,6 +1024,15 @@ export const useStore = create<AppState>((set, get) => ({
                   },
                 };
               }
+
+              const executionHistoryEntry = {
+                executed_at: now,
+                duration_ms: result.durationMs,
+                ok: false,
+                timed_out: result.timedOut,
+                exit_code: result.exitCode,
+                error_summary: summarizeExecutionError(result.error, result.rawStderr),
+              };
 
               return {
                 ...item,
@@ -896,11 +1045,17 @@ export const useStore = create<AppState>((set, get) => ({
                   last_exit_code: result.exitCode,
                   last_duration_ms: result.durationMs,
                 },
+                execution_history: appendExecutionHistoryEntry(
+                  withExecutionHistoryCapacity(item.execution_history, snapshot.executionHistoryLimit),
+                  executionHistoryEntry,
+                  snapshot.executionHistoryLimit,
+                ),
                 runtimeData: {
                   state: 'error',
                   isLoading: false,
                   source: item.cache_data?.last_success_payload ? 'cache' : 'none',
                   payload: item.cache_data?.last_success_payload,
+                  thresholdAlertTriggered: false,
                   error: result.error,
                   stderr: result.rawStderr,
                   exitCode: result.exitCode,
@@ -910,6 +1065,10 @@ export const useStore = create<AppState>((set, get) => ({
               };
             }),
           }));
+
+          for (const notification of pendingNotifications) {
+            await notificationService.sendDesktopNotification(notification.title, notification.body);
+          }
         },
         () => get().refreshConcurrencyLimit,
       );

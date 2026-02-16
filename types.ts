@@ -36,6 +36,19 @@ export interface GaugeMappingConfig {
   unit_key?: string;
 }
 
+export interface CardAlertConfig {
+  enabled: boolean;
+  cooldown_sec: number;
+  status_change_enabled?: boolean;
+  upper_threshold?: number;
+  lower_threshold?: number;
+}
+
+export interface CardAlertState {
+  last_status_state?: ScriptOutputStatus['state'];
+  condition_last_trigger_at: Record<string, number>;
+}
+
 export interface MappingConfig {
   scalar?: ScalarMappingConfig;
   series?: SeriesMappingConfig;
@@ -117,11 +130,28 @@ export interface CacheData {
   last_duration_ms?: number;
 }
 
+export interface CardExecutionHistoryEntry {
+  executed_at: number;
+  duration_ms: number;
+  ok: boolean;
+  timed_out: boolean;
+  exit_code: number | null;
+  error_summary?: string;
+}
+
+export interface CardExecutionHistoryBuffer {
+  capacity: number;
+  next_index: number;
+  size: number;
+  entries: CardExecutionHistoryEntry[];
+}
+
 export interface CardRuntimeData {
   state: RuntimeState;
   isLoading: boolean;
   source: 'live' | 'cache' | 'none';
   payload?: NormalizedCardPayload;
+  thresholdAlertTriggered?: boolean;
   error?: string;
   stderr?: string;
   exitCode?: number | null;
@@ -140,7 +170,10 @@ export interface Card {
   ui_config: UIConfig;
   layout_positions?: LayoutPositionMap;
   status: CardStatus;
+  alert_config?: CardAlertConfig;
+  alert_state?: CardAlertState;
   cache_data?: CacheData;
+  execution_history?: CardExecutionHistoryBuffer;
   runtimeData?: CardRuntimeData;
 }
 
@@ -164,10 +197,11 @@ export interface AppSettings {
   dashboard_columns: number;
   adaptive_window_enabled: boolean;
   refresh_concurrency_limit: number;
+  execution_history_limit: number;
   activeGroup: string;
   cards: Card[];
   section_markers: SectionMarker[];
   default_python_path?: string;
 }
 
-export type ViewMode = 'dashboard' | 'recycle_bin' | 'settings';
+export type ViewMode = 'dashboard' | 'diagnostics' | 'recycle_bin' | 'settings';

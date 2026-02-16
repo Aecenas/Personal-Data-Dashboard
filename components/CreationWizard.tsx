@@ -23,6 +23,7 @@ import { useStore } from '../store';
 import { Card, CardType, MappingConfig, UIConfig } from '../types';
 import { executionService, ExecutionResult } from '../services/execution';
 import { ArgParseError, formatScriptArgs, parseScriptArgs } from '../services/arg-parser';
+import { normalizeAlertConfig } from '../services/alerts';
 import { t } from '../i18n';
 
 interface CreationWizardProps {
@@ -58,6 +59,11 @@ interface WizardForm {
   gaugeMaxKey: string;
   gaugeValueKey: string;
   gaugeUnitKey: string;
+  alertEnabled: boolean;
+  alertCooldownSec: number;
+  alertStatusChangeEnabled: boolean;
+  alertUpperThreshold: string;
+  alertLowerThreshold: string;
 }
 
 type ScriptValidationStatus = 'idle' | 'checking' | 'valid' | 'invalid';
@@ -96,6 +102,11 @@ const defaultForm: WizardForm = {
   gaugeMaxKey: 'max',
   gaugeValueKey: 'value',
   gaugeUnitKey: 'unit',
+  alertEnabled: false,
+  alertCooldownSec: 300,
+  alertStatusChangeEnabled: true,
+  alertUpperThreshold: '',
+  alertLowerThreshold: '',
 };
 
 const buildMappingConfig = (form: WizardForm): MappingConfig => ({
@@ -124,35 +135,44 @@ const buildMappingConfig = (form: WizardForm): MappingConfig => ({
   },
 });
 
-const createFormFromCard = (card: Card): WizardForm => ({
-  title: card.title,
-  group: card.group,
-  type: card.type,
-  size: card.ui_config.size,
-  colorTheme: card.ui_config.color_theme,
-  scriptPath: card.script_config.path,
-  scriptArgsText: formatScriptArgs(card.script_config.args),
-  pythonPath: card.script_config.env_path ?? '',
-  intervalSec: card.refresh_config.interval_sec,
-  timeoutMs: card.refresh_config.timeout_ms,
-  refreshOnStart: card.refresh_config.refresh_on_start,
-  refreshOnResume: card.refresh_config.refresh_on_resume,
-  scalarValueKey: card.mapping_config.scalar?.value_key ?? 'value',
-  scalarUnitKey: card.mapping_config.scalar?.unit_key ?? 'unit',
-  scalarTrendKey: card.mapping_config.scalar?.trend_key ?? 'trend',
-  scalarColorKey: card.mapping_config.scalar?.color_key ?? 'color',
-  seriesXAxisKey: card.mapping_config.series?.x_axis_key ?? 'x_axis',
-  seriesKey: card.mapping_config.series?.series_key ?? 'series',
-  seriesNameKey: card.mapping_config.series?.series_name_key ?? 'name',
-  seriesValuesKey: card.mapping_config.series?.series_values_key ?? 'values',
-  statusLabelKey: card.mapping_config.status?.label_key ?? 'label',
-  statusStateKey: card.mapping_config.status?.state_key ?? 'state',
-  statusMessageKey: card.mapping_config.status?.message_key ?? 'message',
-  gaugeMinKey: card.mapping_config.gauge?.min_key ?? 'min',
-  gaugeMaxKey: card.mapping_config.gauge?.max_key ?? 'max',
-  gaugeValueKey: card.mapping_config.gauge?.value_key ?? 'value',
-  gaugeUnitKey: card.mapping_config.gauge?.unit_key ?? 'unit',
-});
+const createFormFromCard = (card: Card): WizardForm => {
+  const alertConfig = normalizeAlertConfig(card.alert_config);
+
+  return {
+    title: card.title,
+    group: card.group,
+    type: card.type,
+    size: card.ui_config.size,
+    colorTheme: card.ui_config.color_theme,
+    scriptPath: card.script_config.path,
+    scriptArgsText: formatScriptArgs(card.script_config.args),
+    pythonPath: card.script_config.env_path ?? '',
+    intervalSec: card.refresh_config.interval_sec,
+    timeoutMs: card.refresh_config.timeout_ms,
+    refreshOnStart: card.refresh_config.refresh_on_start,
+    refreshOnResume: card.refresh_config.refresh_on_resume,
+    scalarValueKey: card.mapping_config.scalar?.value_key ?? 'value',
+    scalarUnitKey: card.mapping_config.scalar?.unit_key ?? 'unit',
+    scalarTrendKey: card.mapping_config.scalar?.trend_key ?? 'trend',
+    scalarColorKey: card.mapping_config.scalar?.color_key ?? 'color',
+    seriesXAxisKey: card.mapping_config.series?.x_axis_key ?? 'x_axis',
+    seriesKey: card.mapping_config.series?.series_key ?? 'series',
+    seriesNameKey: card.mapping_config.series?.series_name_key ?? 'name',
+    seriesValuesKey: card.mapping_config.series?.series_values_key ?? 'values',
+    statusLabelKey: card.mapping_config.status?.label_key ?? 'label',
+    statusStateKey: card.mapping_config.status?.state_key ?? 'state',
+    statusMessageKey: card.mapping_config.status?.message_key ?? 'message',
+    gaugeMinKey: card.mapping_config.gauge?.min_key ?? 'min',
+    gaugeMaxKey: card.mapping_config.gauge?.max_key ?? 'max',
+    gaugeValueKey: card.mapping_config.gauge?.value_key ?? 'value',
+    gaugeUnitKey: card.mapping_config.gauge?.unit_key ?? 'unit',
+    alertEnabled: alertConfig.enabled,
+    alertCooldownSec: alertConfig.cooldown_sec,
+    alertStatusChangeEnabled: alertConfig.status_change_enabled ?? true,
+    alertUpperThreshold: alertConfig.upper_threshold !== undefined ? String(alertConfig.upper_threshold) : '',
+    alertLowerThreshold: alertConfig.lower_threshold !== undefined ? String(alertConfig.lower_threshold) : '',
+  };
+};
 
 export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editingCard }) => {
   const { cards, addCard, updateCard, refreshCard, defaultPythonPath, language } = useStore();
@@ -298,6 +318,21 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     }
   }, [form.scriptArgsText, language]);
 
+  const parseOptionalThreshold = (input: string): number | undefined => {
+    const value = input.trim();
+    if (!value) return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const buildAlertConfig = () => normalizeAlertConfig({
+    enabled: form.alertEnabled,
+    cooldown_sec: Number(form.alertCooldownSec),
+    status_change_enabled: form.alertStatusChangeEnabled,
+    upper_threshold: parseOptionalThreshold(form.alertUpperThreshold),
+    lower_threshold: parseOptionalThreshold(form.alertLowerThreshold),
+  });
+
   const updateForm = <K extends keyof WizardForm>(key: K, value: WizardForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -368,6 +403,42 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           return false;
         }
       }
+
+      if (form.alertCooldownSec < 0) {
+        setValidationMessage(tr('wizard.validation.alertCooldownMin'));
+        return false;
+      }
+
+      const upperRaw = form.alertUpperThreshold.trim();
+      const lowerRaw = form.alertLowerThreshold.trim();
+      const upperThreshold = parseOptionalThreshold(form.alertUpperThreshold);
+      const lowerThreshold = parseOptionalThreshold(form.alertLowerThreshold);
+
+      if (upperRaw && upperThreshold === undefined) {
+        setValidationMessage(tr('wizard.validation.alertUpperNumber'));
+        return false;
+      }
+
+      if (lowerRaw && lowerThreshold === undefined) {
+        setValidationMessage(tr('wizard.validation.alertLowerNumber'));
+        return false;
+      }
+
+      if ((form.type === 'scalar' || form.type === 'gauge') && form.alertEnabled) {
+        if (!upperRaw && !lowerRaw) {
+          setValidationMessage(tr('wizard.validation.alertThresholdRequired'));
+          return false;
+        }
+      }
+
+      if (
+        upperThreshold !== undefined &&
+        lowerThreshold !== undefined &&
+        lowerThreshold > upperThreshold
+      ) {
+        setValidationMessage(tr('wizard.validation.alertThresholdRange'));
+        return false;
+      }
     }
 
     setValidationMessage('');
@@ -429,6 +500,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     if (!valid) return;
 
     const mappingConfig = buildMappingConfig(form);
+    const alertConfig = buildAlertConfig();
     const args = parsedArgs.args;
     const runtimePayload = testResult?.ok ? testResult.payload : undefined;
 
@@ -449,6 +521,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           refresh_on_resume: form.refreshOnResume,
           timeout_ms: Number(form.timeoutMs),
         },
+        alert_config: alertConfig,
         ui_config: {
           ...editingCard.ui_config,
           size: form.size,
@@ -488,6 +561,10 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         refresh_on_start: form.refreshOnStart,
         refresh_on_resume: form.refreshOnResume,
         timeout_ms: Number(form.timeoutMs),
+      },
+      alert_config: alertConfig,
+      alert_state: {
+        condition_last_trigger_at: {},
       },
       ui_config: {
         color_theme: form.colorTheme,
@@ -983,6 +1060,79 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           </div>
         </div>
       )}
+
+      <div className="rounded-lg border border-border/70 bg-secondary/20 p-4 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">{tr('wizard.alerts.title')}</p>
+            <p className="text-xs text-muted-foreground">{tr('wizard.alerts.description')}</p>
+          </div>
+          <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.alertEnabled}
+              onChange={(event) => updateForm('alertEnabled', event.target.checked)}
+            />
+            <span>{tr('wizard.alerts.enabled')}</span>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.alerts.cooldown')}</label>
+            <input
+              type="number"
+              min={0}
+              value={form.alertCooldownSec}
+              onChange={(event) => updateForm('alertCooldownSec', Number(event.target.value))}
+              className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
+            />
+          </div>
+
+          {form.type === 'status' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{tr('wizard.alerts.statusModeLabel')}</label>
+              <label className="inline-flex items-center gap-2 text-sm cursor-pointer mt-2">
+                <input
+                  type="checkbox"
+                  checked={form.alertStatusChangeEnabled}
+                  onChange={(event) => updateForm('alertStatusChangeEnabled', event.target.checked)}
+                />
+                <span>{tr('wizard.alerts.statusChange')}</span>
+              </label>
+            </div>
+          )}
+
+          {(form.type === 'scalar' || form.type === 'gauge') && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{tr('wizard.alerts.upperThreshold')}</label>
+                <input
+                  type="number"
+                  value={form.alertUpperThreshold}
+                  onChange={(event) => updateForm('alertUpperThreshold', event.target.value)}
+                  placeholder={tr('wizard.alerts.thresholdOptional')}
+                  className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{tr('wizard.alerts.lowerThreshold')}</label>
+                <input
+                  type="number"
+                  value={form.alertLowerThreshold}
+                  onChange={(event) => updateForm('alertLowerThreshold', event.target.value)}
+                  placeholder={tr('wizard.alerts.thresholdOptional')}
+                  className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {form.type === 'series' && (
+          <p className="text-xs text-muted-foreground">{tr('wizard.alerts.seriesNotSupported')}</p>
+        )}
+      </div>
 
       <div className="rounded-lg border border-border/70 bg-secondary/20 p-3 text-xs text-muted-foreground">
         {tr('wizard.mappingHint')}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI UX Pro Max"
+  short_description: "Generate production-grade UI/UX design systems"
+  default_prompt: "Create UI/UX solutions with clear hierarchy, accessibility, and implementation-ready guidance."

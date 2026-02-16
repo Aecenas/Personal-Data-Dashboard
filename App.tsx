@@ -4,8 +4,9 @@ import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { RecycleBin } from './components/RecycleBin';
 import { Settings } from './components/Settings';
+import { Diagnostics } from './components/Diagnostics';
 import { CreationWizard } from './components/CreationWizard';
-import { storageService } from './services/storage';
+import { storageService, STORAGE_SCHEMA_VERSION } from './services/storage';
 import { clampDashboardColumns, DEFAULT_DASHBOARD_COLUMNS } from './grid';
 
 const DEFAULT_WINDOW_WIDTH = 1380;
@@ -225,12 +226,13 @@ const App: React.FC = () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         storageService.save({
-          schema_version: 1,
+          schema_version: STORAGE_SCHEMA_VERSION,
           theme: state.theme,
           language: state.language,
           dashboard_columns: state.dashboardColumns,
           adaptive_window_enabled: state.adaptiveWindowEnabled,
           refresh_concurrency_limit: state.refreshConcurrencyLimit,
+          execution_history_limit: state.executionHistoryLimit,
           cards: state.cards,
           section_markers: state.sectionMarkers,
           activeGroup: state.activeGroup,
@@ -341,6 +343,11 @@ const App: React.FC = () => {
         <div className="h-full overflow-hidden">
           {currentView === 'dashboard' && (
             <Dashboard onAddClick={openCreateWizard} onEditCard={openEditWizard} />
+          )}
+          {currentView === 'diagnostics' && (
+            <div className="h-full overflow-y-auto">
+              <Diagnostics />
+            </div>
           )}
           {currentView === 'recycle_bin' && (
             <div className="h-full overflow-y-auto">

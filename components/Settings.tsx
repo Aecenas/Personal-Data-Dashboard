@@ -6,6 +6,12 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { t } from '../i18n';
 import { MAX_DASHBOARD_COLUMNS, MIN_DASHBOARD_COLUMNS } from '../grid';
 import { MAX_REFRESH_CONCURRENCY, MIN_REFRESH_CONCURRENCY } from '../refresh';
+import { notificationService, NotificationPermissionStatus } from '../services/notification';
+import {
+  clampExecutionHistoryLimit,
+  MAX_EXECUTION_HISTORY_LIMIT,
+  MIN_EXECUTION_HISTORY_LIMIT,
+} from '../services/diagnostics';
 
 export const Settings = () => {
   const {
@@ -23,13 +29,73 @@ export const Settings = () => {
     setDefaultPythonPath,
     refreshConcurrencyLimit,
     setRefreshConcurrencyLimit,
+    executionHistoryLimit,
+    setExecutionHistoryLimit,
   } = useStore();
   const [pythonPathInput, setPythonPathInput] = useState(defaultPythonPath ?? '');
+  const [executionHistoryLimitInput, setExecutionHistoryLimitInput] = useState(
+    String(executionHistoryLimit),
+  );
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus>('unsupported');
+  const [isUpdatingNotificationPermission, setIsUpdatingNotificationPermission] = useState(false);
+  const [isSendingTestNotification, setIsSendingTestNotification] = useState(false);
+  const [notificationHint, setNotificationHint] = useState('');
   const tr = (key: string, params?: Record<string, string | number>) => t(language, key, params);
 
   useEffect(() => {
     setPythonPathInput(defaultPythonPath ?? '');
   }, [defaultPythonPath]);
+
+  useEffect(() => {
+    setExecutionHistoryLimitInput(String(executionHistoryLimit));
+  }, [executionHistoryLimit]);
+
+  const refreshNotificationPermission = async () => {
+    const status = await notificationService.getPermissionStatus();
+    setNotificationPermission(status);
+  };
+
+  useEffect(() => {
+    void refreshNotificationPermission();
+  }, []);
+
+  const handleRequestNotificationPermission = async () => {
+    setIsUpdatingNotificationPermission(true);
+    setNotificationHint('');
+    try {
+      const status = await notificationService.requestPermission();
+      setNotificationPermission(status);
+      if (status === 'granted') {
+        setNotificationHint(tr('settings.notificationPermissionGrantedHint'));
+      } else if (status === 'denied') {
+        setNotificationHint(tr('settings.notificationPermissionDeniedHint'));
+      }
+    } finally {
+      setIsUpdatingNotificationPermission(false);
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    setIsSendingTestNotification(true);
+    setNotificationHint('');
+    try {
+      const ok = await notificationService.sendDesktopNotification(
+        tr('settings.testNotificationTitle'),
+        tr('settings.testNotificationBody'),
+      );
+      await refreshNotificationPermission();
+      setNotificationHint(ok ? tr('settings.testNotificationSent') : tr('settings.testNotificationFailed'));
+    } finally {
+      setIsSendingTestNotification(false);
+    }
+  };
+
+  const getPermissionLabel = (status: NotificationPermissionStatus) => {
+    if (status === 'granted') return tr('settings.notificationPermissionGranted');
+    if (status === 'denied') return tr('settings.notificationPermissionDenied');
+    if (status === 'default') return tr('settings.notificationPermissionDefault');
+    return tr('settings.notificationPermissionUnsupported');
+  };
 
   const handleChooseFolder = async () => {
     try {
@@ -53,6 +119,13 @@ export const Settings = () => {
 
   const savePythonPath = () => {
     setDefaultPythonPath(pythonPathInput.trim() || undefined);
+  };
+
+  const saveExecutionHistoryLimit = () => {
+    const parsed = Number.parseInt(executionHistoryLimitInput.trim(), 10);
+    const normalized = clampExecutionHistoryLimit(parsed, executionHistoryLimit);
+    setExecutionHistoryLimit(normalized);
+    setExecutionHistoryLimitInput(String(normalized));
   };
 
   return (
@@ -224,6 +297,35 @@ export const Settings = () => {
               </select>
             </div>
 
+            <div className="space-y-2">
+              <p className="font-medium">{tr('settings.historyLimit')}</p>
+              <p className="text-sm text-muted-foreground">
+                {tr('settings.historyLimitDesc', {
+                  min: MIN_EXECUTION_HISTORY_LIMIT,
+                  max: MAX_EXECUTION_HISTORY_LIMIT,
+                })}
+              </p>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  min={MIN_EXECUTION_HISTORY_LIMIT}
+                  max={MAX_EXECUTION_HISTORY_LIMIT}
+                  step={1}
+                  value={executionHistoryLimitInput}
+                  onChange={(event) => setExecutionHistoryLimitInput(event.target.value)}
+                  onBlur={saveExecutionHistoryLimit}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      saveExecutionHistoryLimit();
+                    }
+                  }}
+                  className="w-32 bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <span className="text-xs text-muted-foreground">{tr('settings.historyLimitHint')}</span>
+              </div>
+            </div>
+
             <div className="rounded-lg border border-border/60 bg-secondary/20 p-3 text-xs text-muted-foreground space-y-2">
               <div className="flex items-center gap-2 text-foreground">
                 <Info size={14} />
@@ -240,6 +342,45 @@ export const Settings = () => {
                 {tr('settings.scriptOutputFormat')}
               </p>
             </div>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+          <h2 className="text-lg font-medium mb-4">{tr('settings.notifications')}</h2>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="font-medium">{tr('settings.notificationPermission')}</p>
+              <p className="text-sm text-muted-foreground">{tr('settings.notificationPermissionDesc')}</p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 rounded-md border border-border/70 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">{tr('settings.notificationPermissionCurrent')}</span>
+              <span className="font-medium">{getPermissionLabel(notificationPermission)}</span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={handleRequestNotificationPermission}
+                disabled={isUpdatingNotificationPermission}
+              >
+                {isUpdatingNotificationPermission
+                  ? tr('settings.requestingNotificationPermission')
+                  : tr('settings.requestNotificationPermission')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleSendTestNotification}
+                disabled={notificationPermission !== 'granted' || isSendingTestNotification}
+              >
+                {isSendingTestNotification
+                  ? tr('settings.sendingTestNotification')
+                  : tr('settings.sendTestNotification')}
+              </Button>
+            </div>
+
+            {notificationHint && (
+              <p className="text-xs text-muted-foreground">{notificationHint}</p>
+            )}
           </div>
         </div>
       </div>

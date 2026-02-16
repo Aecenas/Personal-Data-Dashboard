@@ -11,7 +11,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 import { storageMigration } from './storage';
 
 describe('storage migration', () => {
-  it('migrates v0 payload to v1 schema', () => {
+  it('migrates legacy payload to v2 schema', () => {
     const legacy = {
       theme: 'dark',
       activeGroup: 'Infrastructure',
@@ -57,13 +57,14 @@ describe('storage migration', () => {
       ],
     };
 
-    const migrated = storageMigration.migrateToV1(legacy);
+    const migrated = storageMigration.migrateToV2(legacy);
 
-    expect(migrated.schema_version).toBe(1);
+    expect(migrated.schema_version).toBe(2);
     expect(migrated.language).toBe('en-US');
     expect(migrated.dashboard_columns).toBe(4);
     expect(migrated.adaptive_window_enabled).toBe(true);
     expect(migrated.refresh_concurrency_limit).toBe(4);
+    expect(migrated.execution_history_limit).toBe(120);
     expect(migrated.activeGroup).toBe('Infrastructure');
     expect(migrated.cards).toHaveLength(1);
     expect(migrated.section_markers).toEqual([
@@ -86,10 +87,22 @@ describe('storage migration', () => {
     expect(card.status.sort_order).toBe(1);
     expect(card.mapping_config.scalar?.value_key).toBe('metrics.value');
     expect(card.cache_data?.last_success_payload).toEqual({ value: 99, unit: '%' });
+    expect(card.alert_config).toEqual({
+      enabled: false,
+      cooldown_sec: 300,
+      status_change_enabled: true,
+      upper_threshold: undefined,
+      lower_threshold: undefined,
+    });
+    expect(card.alert_state).toEqual({
+      last_status_state: undefined,
+      condition_last_trigger_at: {},
+    });
+    expect(card.execution_history).toBeUndefined();
   });
 
   it('keeps gauge type and default gauge mapping keys', () => {
-    const migrated = storageMigration.migrateToV1({
+    const migrated = storageMigration.migrateToV2({
       cards: [
         {
           id: 'gauge-1',
@@ -112,5 +125,46 @@ describe('storage migration', () => {
       value_key: 'value',
       unit_key: 'unit',
     });
+  });
+
+  it('normalizes persisted execution history when migrating', () => {
+    const migrated = storageMigration.migrateToV2({
+      schema_version: 1,
+      execution_history_limit: 80,
+      cards: [
+        {
+          id: 'card-1',
+          title: 'CPU',
+          group: 'Infra',
+          type: 'scalar',
+          script_config: {
+            path: '/tmp/cpu.py',
+            args: [],
+          },
+          execution_history: {
+            capacity: 3,
+            size: 3,
+            next_index: 1,
+            entries: [
+              { executed_at: 1000, duration_ms: 120, ok: true, timed_out: false, exit_code: 0 },
+              { executed_at: 2000, duration_ms: 140, ok: false, timed_out: true, exit_code: null, error_summary: 'timeout' },
+              { executed_at: 3000, duration_ms: 160, ok: true, timed_out: false, exit_code: 0 },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(migrated.cards[0].execution_history).toEqual({
+      capacity: 80,
+      size: 3,
+      next_index: 3,
+      entries: [
+        { executed_at: 1000, duration_ms: 120, ok: true, timed_out: false, exit_code: 0, error_summary: undefined },
+        { executed_at: 2000, duration_ms: 140, ok: false, timed_out: true, exit_code: null, error_summary: 'timeout' },
+        { executed_at: 3000, duration_ms: 160, ok: true, timed_out: false, exit_code: 0, error_summary: undefined },
+      ],
+    });
+    expect(migrated.execution_history_limit).toBe(80);
   });
 });

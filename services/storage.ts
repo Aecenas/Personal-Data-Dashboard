@@ -11,11 +11,18 @@ import { t } from '../i18n';
 import { ensureCardLayoutScopes } from '../layout';
 import { clampDashboardColumns } from '../grid';
 import { clampRefreshConcurrency } from '../refresh';
+import { normalizeAlertConfig, normalizeAlertState } from './alerts';
+import {
+  clampExecutionHistoryLimit,
+  DEFAULT_EXECUTION_HISTORY_LIMIT,
+  normalizeExecutionHistoryBuffer,
+  withExecutionHistoryCapacity,
+} from './diagnostics';
 
 const POINTER_FILENAME = 'storage_config.json';
 const DATA_FILENAME = 'user_settings.json';
 const DEFAULT_SUBDIR = 'data';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 interface StorageConfig {
   customPath: string | null;
@@ -191,7 +198,7 @@ const normalizeSectionMarker = (rawMarker: any, index: number, columns: number):
   };
 };
 
-const normalizeCard = (rawCard: any, index: number): Card => {
+const normalizeCard = (rawCard: any, index: number, historyLimit: number): Card => {
   const cardType: Card['type'] =
     rawCard?.type === 'scalar' ||
     rawCard?.type === 'series' ||
@@ -203,6 +210,10 @@ const normalizeCard = (rawCard: any, index: number): Card => {
   const mapping = normalizeMapping(rawCard?.mapping_config, cardType);
 
   const cacheFromLegacy = deriveCacheFromLegacyRuntime(rawCard?.runtimeData);
+  const executionHistory = withExecutionHistoryCapacity(
+    normalizeExecutionHistoryBuffer(rawCard?.execution_history, historyLimit),
+    historyLimit,
+  );
 
   const card: Card = {
     id: String(rawCard?.id ?? crypto.randomUUID()),
@@ -238,16 +249,20 @@ const normalizeCard = (rawCard: any, index: number): Card => {
       deleted_at: rawCard?.status?.deleted_at ? String(rawCard.status.deleted_at) : null,
       sort_order: Number(rawCard?.status?.sort_order ?? index + 1),
     },
+    alert_config: normalizeAlertConfig(rawCard?.alert_config),
+    alert_state: normalizeAlertState(rawCard?.alert_state),
     cache_data: rawCard?.cache_data ?? cacheFromLegacy,
+    execution_history: executionHistory.size > 0 ? executionHistory : undefined,
   };
 
   return ensureCardLayoutScopes(card);
 };
 
-const migrateToV1 = (input: any): AppSettings => {
+const migrateToV2 = (input: any): AppSettings => {
   const dashboard_columns = clampDashboardColumns(input?.dashboard_columns);
+  const execution_history_limit = clampExecutionHistoryLimit(input?.execution_history_limit);
   const cardsRaw = Array.isArray(input?.cards) ? input.cards : [];
-  const cards = cardsRaw.map((card: any, index: number) => normalizeCard(card, index));
+  const cards = cardsRaw.map((card: any, index: number) => normalizeCard(card, index, execution_history_limit));
   const sectionRaw = Array.isArray(input?.section_markers) ? input.section_markers : [];
   const sectionMarkers = sectionRaw.map((marker: any, index: number) =>
     normalizeSectionMarker(marker, index, dashboard_columns),
@@ -260,6 +275,7 @@ const migrateToV1 = (input: any): AppSettings => {
     dashboard_columns,
     adaptive_window_enabled: normalizeAdaptiveWindowEnabled(input?.adaptive_window_enabled),
     refresh_concurrency_limit: clampRefreshConcurrency(input?.refresh_concurrency_limit),
+    execution_history_limit,
     activeGroup: typeof input?.activeGroup === 'string' ? input.activeGroup : 'All',
     cards,
     section_markers: sectionMarkers,
@@ -273,8 +289,16 @@ const sanitizeForSave = (settings: AppSettings): AppSettings => {
   const refresh_concurrency_limit = clampRefreshConcurrency(
     (settings as Partial<AppSettings>).refresh_concurrency_limit,
   );
+  const execution_history_limit = clampExecutionHistoryLimit(
+    (settings as Partial<AppSettings>).execution_history_limit,
+    DEFAULT_EXECUTION_HISTORY_LIMIT,
+  );
   const cards = settings.cards.map((card, index) => {
     const normalizedCard = ensureCardLayoutScopes(card);
+    const executionHistory = withExecutionHistoryCapacity(
+      normalizeExecutionHistoryBuffer(normalizedCard.execution_history, execution_history_limit),
+      execution_history_limit,
+    );
     return {
       ...normalizedCard,
       status: {
@@ -287,6 +311,9 @@ const sanitizeForSave = (settings: AppSettings): AppSettings => {
         ...defaultRefreshConfig,
         ...normalizedCard.refresh_config,
       },
+      alert_config: normalizeAlertConfig(normalizedCard.alert_config),
+      alert_state: normalizeAlertState(normalizedCard.alert_state),
+      execution_history: executionHistory.size > 0 ? executionHistory : undefined,
       runtimeData: undefined,
     };
   });
@@ -302,6 +329,7 @@ const sanitizeForSave = (settings: AppSettings): AppSettings => {
     dashboard_columns,
     adaptive_window_enabled: normalizeAdaptiveWindowEnabled((settings as Partial<AppSettings>).adaptive_window_enabled),
     refresh_concurrency_limit,
+    execution_history_limit,
     activeGroup: typeof settings.activeGroup === 'string' ? settings.activeGroup : 'All',
     section_markers,
     default_python_path: settings.default_python_path,
@@ -417,7 +445,7 @@ export const storageService = {
         return sanitizeForSave(parsed as AppSettings);
       }
 
-      return migrateToV1(parsed);
+      return migrateToV2(parsed);
     } catch (error) {
       console.error('Failed to load settings from disk', error);
       return null;
@@ -426,5 +454,7 @@ export const storageService = {
 };
 
 export const storageMigration = {
-  migrateToV1,
+  migrateToV2,
 };
+
+export const STORAGE_SCHEMA_VERSION = SCHEMA_VERSION;

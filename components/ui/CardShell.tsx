@@ -8,6 +8,8 @@ import {
   AlertCircle,
   Clock3,
   CircleAlert,
+  AlertTriangle,
+  History,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from './Button';
@@ -22,6 +24,7 @@ interface CardShellProps {
   onSelect?: () => void;
   onRefresh?: () => void;
   onEdit?: () => void;
+  onHistory?: () => void;
 }
 
 const formatTime = (value: number | undefined, language: AppLanguage, neverText: string) => {
@@ -38,6 +41,7 @@ export const CardShell: React.FC<CardShellProps> = ({
   onSelect,
   onRefresh,
   onEdit,
+  onHistory,
 }) => {
   const { softDeleteCard, language, theme } = useStore();
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -69,6 +73,7 @@ export const CardShell: React.FC<CardShellProps> = ({
 
   const isLoading = card.runtimeData?.isLoading;
   const isError = card.runtimeData?.state === 'error';
+  const thresholdAlertTriggered = Boolean(card.runtimeData?.thresholdAlertTriggered);
   const selectedInvertedClass =
     isEditMode && isSelected
       ? theme === 'dark'
@@ -178,7 +183,18 @@ export const CardShell: React.FC<CardShellProps> = ({
       `}
     >
       <div className="flex items-center justify-between p-4 pb-2 select-none gap-2">
-        <h3 className="font-semibold tracking-tight truncate text-sm text-muted-foreground uppercase">{card.title}</h3>
+        <div className="min-w-0 flex items-center gap-1.5">
+          {thresholdAlertTriggered && (
+            <AlertTriangle
+              size={14}
+              className="text-amber-500 shrink-0"
+              title={tr('cardShell.thresholdAlertTriggered')}
+            />
+          )}
+          <h3 className="font-semibold tracking-tight truncate text-sm text-muted-foreground uppercase">
+            {card.title}
+          </h3>
+        </div>
 
         {!isEditMode && (
           <div className="relative shrink-0">
@@ -196,7 +212,7 @@ export const CardShell: React.FC<CardShellProps> = ({
 
             {menuOpen && (
               <div
-                className="absolute right-0 top-6 z-50 w-36 rounded-md border border-border bg-popover p-1 shadow-md animate-in fade-in zoom-in-95 duration-100 cursor-default"
+                className="absolute right-0 top-6 z-50 w-40 rounded-md border border-border bg-popover p-1 shadow-md animate-in fade-in zoom-in-95 duration-100 cursor-default"
                 onClick={(event) => event.stopPropagation()}
               >
                 <button
@@ -216,6 +232,15 @@ export const CardShell: React.FC<CardShellProps> = ({
                   }}
                 >
                   <Settings size={12} className="mr-2" /> {tr('cardShell.edit')}
+                </button>
+                <button
+                  className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => {
+                    onHistory?.();
+                    setMenuOpen(false);
+                  }}
+                >
+                  <History size={12} className="mr-2" /> {tr('cardShell.history')}
                 </button>
                 <button
                   onClick={() => {
