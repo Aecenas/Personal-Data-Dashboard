@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   FileCode,
@@ -57,6 +57,14 @@ interface WizardForm {
   gaugeMaxKey: string;
   gaugeValueKey: string;
   gaugeUnitKey: string;
+}
+
+type ScriptValidationStatus = 'idle' | 'checking' | 'valid' | 'invalid';
+
+interface ScriptValidationState {
+  status: ScriptValidationStatus;
+  message?: string;
+  resolvedPython?: string;
 }
 
 const defaultForm: WizardForm = {
@@ -160,10 +168,16 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
   const [testResult, setTestResult] = useState<ExecutionResult | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [validationMessage, setValidationMessage] = useState<string>('');
+  const [scriptValidation, setScriptValidation] = useState<ScriptValidationState>({ status: 'idle' });
+  const scriptValidationRequestRef = useRef(0);
 
   const isEditing = Boolean(editingCard);
 
   useEffect(() => {
+    scriptValidationRequestRef.current += 1;
+    setScriptValidation({ status: 'idle' });
+    setValidationMessage('');
+
     if (editingCard) {
       setForm(createFormFromCard(editingCard));
       setTestResult(null);
@@ -206,6 +220,67 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     form.gaugeUnitKey,
   ]);
 
+  useEffect(() => {
+    const scriptPath = form.scriptPath.trim();
+    const pythonPath = form.pythonPath.trim() || defaultPythonPath?.trim() || undefined;
+
+    scriptValidationRequestRef.current += 1;
+    const requestId = scriptValidationRequestRef.current;
+
+    if (!scriptPath) {
+      setScriptValidation({ status: 'idle' });
+      return;
+    }
+
+    if (!scriptPath.endsWith('.py')) {
+      setScriptValidation({
+        status: 'invalid',
+        message: tr('wizard.validation.scriptExt'),
+      });
+      return;
+    }
+
+    setScriptValidation({ status: 'checking' });
+
+    const timerId = setTimeout(() => {
+      void (async () => {
+        const result = await executionService.validateScript(scriptPath, pythonPath);
+        if (scriptValidationRequestRef.current !== requestId) return;
+
+        if (result.valid) {
+          setScriptValidation({
+            status: 'valid',
+            message: result.message,
+            resolvedPython: result.resolved_python,
+          });
+          return;
+        }
+
+        setScriptValidation({
+          status: 'invalid',
+          message: result.message || tr('wizard.validation.scriptPrecheckFailed'),
+        });
+      })();
+    }, 400);
+
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [form.scriptPath, form.pythonPath, defaultPythonPath, language]);
+
+  const getScriptValidationBlockMessage = () => {
+    if (scriptValidation.status === 'checking') {
+      return tr('wizard.validation.scriptChecking');
+    }
+    if (scriptValidation.status === 'invalid') {
+      return scriptValidation.message || tr('wizard.validation.scriptPrecheckFailed');
+    }
+    if (scriptValidation.status === 'idle') {
+      return tr('wizard.validation.scriptPrecheckPending');
+    }
+    return '';
+  };
+
   const updateForm = <K extends keyof WizardForm>(key: K, value: WizardForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -237,6 +312,10 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       }
       if (form.timeoutMs < 1000) {
         setValidationMessage(tr('wizard.validation.timeoutMin'));
+        return false;
+      }
+      if (scriptValidation.status !== 'valid') {
+        setValidationMessage(getScriptValidationBlockMessage());
         return false;
       }
     }
@@ -621,6 +700,41 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         </div>
       </div>
 
+      {scriptValidation.status !== 'idle' && (
+        <div
+          className={`rounded-md border px-3 py-2 text-sm ${
+            scriptValidation.status === 'valid'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              : scriptValidation.status === 'checking'
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                : 'border-red-500/30 bg-red-500/10 text-red-300'
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            {scriptValidation.status === 'checking' && <Loader2 size={16} className="mt-0.5 animate-spin" />}
+            {scriptValidation.status === 'valid' && <CheckCircle2 size={16} className="mt-0.5" />}
+            {scriptValidation.status === 'invalid' && <ShieldAlert size={16} className="mt-0.5" />}
+            <div className="space-y-1">
+              <p className="font-medium">
+                {scriptValidation.status === 'checking'
+                  ? tr('wizard.scriptValidationChecking')
+                  : scriptValidation.status === 'valid'
+                    ? tr('wizard.scriptValidationValid')
+                    : tr('wizard.scriptValidationInvalid')}
+              </p>
+              {scriptValidation.status === 'valid' && (
+                <p>
+                  {scriptValidation.resolvedPython
+                    ? tr('wizard.scriptValidationResolved', { python: scriptValidation.resolvedPython })
+                    : tr('wizard.scriptValidationResolvedFallback')}
+                </p>
+              )}
+              {scriptValidation.status === 'invalid' && scriptValidation.message && <p>{scriptValidation.message}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <label className="text-sm font-medium">{tr('wizard.refreshInterval')}</label>
@@ -946,7 +1060,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         <div>
           <h3 className="text-lg font-medium">{tr('wizard.testAndPreview')}</h3>
         </div>
-        <Button onClick={runTest} disabled={isTesting}>
+        <Button onClick={runTest} disabled={isTesting || scriptValidation.status !== 'valid'}>
           {isTesting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Play size={16} className="mr-2" />}{' '}
           {isTesting ? tr('wizard.running') : tr('wizard.runTest')}
         </Button>
@@ -1063,7 +1177,11 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
                   {tr('common.next')} <ChevronRight size={16} className="ml-1" />
                 </Button>
               )}
-              <Button onClick={handleSubmit} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Button
+                onClick={handleSubmit}
+                disabled={scriptValidation.status !== 'valid'}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
                 {tr('wizard.saveChanges')}
               </Button>
             </div>
@@ -1072,7 +1190,11 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
               {tr('common.next')} <ChevronRight size={16} className="ml-1" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button
+              onClick={handleSubmit}
+              disabled={scriptValidation.status !== 'valid'}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
               {tr('wizard.createCard')}
             </Button>
           )}
