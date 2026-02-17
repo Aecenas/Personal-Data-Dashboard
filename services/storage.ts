@@ -16,6 +16,7 @@ import {
   BackupSchedule,
   BackupWeekday,
   Card,
+  InteractionSoundConfig,
   MappingConfig,
   RefreshConfig,
   SectionMarker,
@@ -44,7 +45,7 @@ const DATA_FILENAME = 'user_settings.json';
 const DEFAULT_SUBDIR = 'data';
 const DEFAULT_BACKUP_SUBDIR = 'backups';
 const BACKUP_FILENAME_PREFIX = 'backup';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const RESERVED_ALL_GROUP = 'All';
 const DEFAULT_GROUP_NAME = 'Default';
 const GROUP_ID_PATTERN = /^G(\d+)$/i;
@@ -57,6 +58,7 @@ const DEFAULT_BACKUP_INTERVAL_MINUTES: BackupIntervalMinutes = 60;
 const DEFAULT_BACKUP_DAILY_HOUR = 3;
 const DEFAULT_BACKUP_DAILY_MINUTE = 0;
 const DEFAULT_BACKUP_WEEKDAY: BackupWeekday = 1;
+const DEFAULT_INTERACTION_SOUND_VOLUME = 65;
 
 interface StorageConfig {
   customPath: string | null;
@@ -275,6 +277,19 @@ const normalizePathString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 const normalizeAutoBackupEnabled = (value: unknown): boolean => value !== false;
+const normalizeInteractionSoundEnabled = (value: unknown): boolean => value !== false;
+
+const clampInteractionSoundVolume = (value: unknown): number => {
+  const parsed = Number.parseInt(String(value ?? DEFAULT_INTERACTION_SOUND_VOLUME), 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_INTERACTION_SOUND_VOLUME;
+  return Math.max(0, Math.min(100, parsed));
+};
+
+const normalizeInteractionSoundConfig = (rawConfig: any): InteractionSoundConfig => ({
+  enabled: normalizeInteractionSoundEnabled(rawConfig?.enabled),
+  volume: clampInteractionSoundVolume(rawConfig?.volume),
+  engine: 'web_audio_native_v1',
+});
 
 const clampBackupRetentionCount = (value: unknown): number => {
   const parsed = Number.parseInt(String(value ?? DEFAULT_BACKUP_RETENTION_COUNT), 10);
@@ -406,6 +421,7 @@ const validateImportStructure = (input: unknown): Record<string, unknown> => {
   ensureOptionalArray(objectPayload, 'section_markers');
   ensureOptionalArray(objectPayload, 'groups');
   ensureOptionalObject(objectPayload, 'backup_config');
+  ensureOptionalObject(objectPayload, 'interaction_sound');
   const backupConfig = objectPayload.backup_config as Record<string, unknown> | undefined;
   if (backupConfig?.schedule !== undefined) {
     ensureOptionalObject(backupConfig, 'schedule');
@@ -700,6 +716,7 @@ const migrateToLatest = (input: any): AppSettings => {
         auto_backup_time: input?.auto_backup_time,
       },
     ),
+    interaction_sound: normalizeInteractionSoundConfig(input?.interaction_sound),
     activeGroup,
     groups,
     cards: cardsWithBusinessIds,
@@ -765,6 +782,7 @@ const sanitizeForSave = (settings: AppSettings): AppSettings => {
     refresh_concurrency_limit,
     execution_history_limit,
     backup_config: normalizeBackupConfig((settings as Partial<AppSettings>).backup_config),
+    interaction_sound: normalizeInteractionSoundConfig((settings as Partial<AppSettings>).interaction_sound),
     activeGroup,
     groups,
     section_markers,

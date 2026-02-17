@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { Button } from './ui/Button';
 import { RotateCcw, Trash, AlertTriangle } from 'lucide-react';
 import { t } from '../i18n';
+import { interactionSoundService } from '../services/interaction-sound';
 
 export const RecycleBin = () => {
   const { cards, restoreCard, hardDeleteCard, clearRecycleBin, language } = useStore();
@@ -13,6 +14,7 @@ export const RecycleBin = () => {
     if (deletedCards.length === 0) return;
     const confirmed = window.confirm(tr('recycle.confirmClear'));
     if (confirmed) {
+      interactionSoundService.play('action.destructive');
       clearRecycleBin();
     }
   };
@@ -24,7 +26,7 @@ export const RecycleBin = () => {
           <h1 className="text-3xl font-bold tracking-tight mb-2">{tr('recycle.title')}</h1>
           <p className="text-muted-foreground">{tr('recycle.description')}</p>
         </div>
-        <Button variant="destructive" onClick={handleClear} disabled={deletedCards.length === 0}>
+        <Button variant="destructive" data-sound="none" onClick={handleClear} disabled={deletedCards.length === 0}>
           <Trash size={14} className="mr-2" /> {tr('recycle.clearBin')}
         </Button>
       </div>
@@ -57,7 +59,11 @@ export const RecycleBin = () => {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => restoreCard(card.id)}
+                      data-sound="none"
+                      onClick={() => {
+                        interactionSoundService.play('action.success');
+                        restoreCard(card.id);
+                      }}
                       className="text-emerald-500 hover:text-emerald-400 hover:bg-emerald-950/20"
                     >
                       <RotateCcw size={14} className="mr-1" /> {tr('recycle.restore')}
@@ -65,9 +71,13 @@ export const RecycleBin = () => {
                     <Button
                       size="sm"
                       variant="ghost"
+                      data-sound="none"
                       onClick={() => {
                         const confirmed = window.confirm(tr('recycle.confirmDelete'));
-                        if (confirmed) hardDeleteCard(card.id);
+                        if (confirmed) {
+                          interactionSoundService.play('action.destructive');
+                          hardDeleteCard(card.id);
+                        }
                       }}
                       className="text-destructive hover:text-red-400 hover:bg-red-950/20"
                     >

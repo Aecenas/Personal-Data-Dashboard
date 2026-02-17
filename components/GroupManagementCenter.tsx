@@ -14,6 +14,7 @@ import {
 import { GroupBatchResult, useStore } from '../store';
 import { Button } from './ui/Button';
 import { t } from '../i18n';
+import { interactionSoundService } from '../services/interaction-sound';
 
 type CenterSectionId = 'create' | 'manage' | 'batch';
 type BatchOperationType = 'move_group' | 'update_interval' | 'soft_delete';
@@ -174,9 +175,11 @@ export const GroupManagementCenter: React.FC = () => {
     setInlineError('');
     const result = createGroup(newGroupName);
     if ('error' in result) {
+      interactionSoundService.play('action.error');
       setInlineError(resolveErrorMessage(result.error));
       return;
     }
+    interactionSoundService.play('action.success');
     setNewGroupName('');
   };
 
@@ -190,15 +193,18 @@ export const GroupManagementCenter: React.FC = () => {
     if (!editingName) return;
     const result = renameGroup(editingName, renameInput);
     if ('error' in result) {
+      interactionSoundService.play('action.error');
       setInlineError(resolveErrorMessage(result.error));
       return;
     }
+    interactionSoundService.play('action.success');
     setInlineError('');
     setEditingName(null);
     setRenameInput('');
   };
 
   const openDeleteDialog = (name: string) => {
+    interactionSoundService.play('modal.open');
     const fallbackTarget = orderedGroups.find((groupName) => groupName !== name) ?? '';
     setDeleteDialog({
       name,
@@ -207,11 +213,17 @@ export const GroupManagementCenter: React.FC = () => {
     });
   };
 
+  const closeDeleteDialog = (playSound = true) => {
+    if (playSound) interactionSoundService.play('modal.close');
+    setDeleteDialog(null);
+  };
+
   const submitDelete = () => {
     if (!deleteDialog) return;
     const targetGroup = deleteDialog.targetGroup.trim();
     const result = deleteGroup(deleteDialog.name, targetGroup || undefined);
     if ('error' in result) {
+      interactionSoundService.play('action.error');
       setDeleteDialog((prev) =>
         prev
           ? {
@@ -222,7 +234,8 @@ export const GroupManagementCenter: React.FC = () => {
       );
       return;
     }
-    setDeleteDialog(null);
+    interactionSoundService.play('action.destructive');
+    closeDeleteDialog(false);
     setInlineError('');
   };
 
@@ -248,6 +261,11 @@ export const GroupManagementCenter: React.FC = () => {
       setBatchResult(result);
       setSelectedCardIds([]);
       setSelectedSectionIds([]);
+      if (result.failures.length > 0) {
+        interactionSoundService.play('action.error');
+      } else if (result.successCards + result.successSections > 0) {
+        interactionSoundService.play('action.success');
+      }
       return;
     }
 
@@ -263,6 +281,11 @@ export const GroupManagementCenter: React.FC = () => {
       setBatchResult(result);
       setSelectedCardIds([]);
       setSelectedSectionIds([]);
+      if (result.failures.length > 0) {
+        interactionSoundService.play('action.error');
+      } else if (result.successCards + result.successSections > 0) {
+        interactionSoundService.play('action.success');
+      }
       return;
     }
 
@@ -275,6 +298,11 @@ export const GroupManagementCenter: React.FC = () => {
     setBatchResult(result);
     setSelectedCardIds([]);
     setSelectedSectionIds([]);
+    if (result.failures.length > 0) {
+      interactionSoundService.play('action.error');
+    } else if (result.successCards + result.successSections > 0) {
+      interactionSoundService.play('action.destructive');
+    }
   };
 
   const hasAllCardsSelected = batchCards.length > 0 && selectedCardIds.length === batchCards.length;
@@ -297,6 +325,7 @@ export const GroupManagementCenter: React.FC = () => {
                 key={section.id}
                 type="button"
                 onClick={() => setActiveSection(section.id)}
+                data-sound="nav.switch"
                 aria-current={isActive ? 'page' : undefined}
                 className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                   isActive
@@ -327,6 +356,7 @@ export const GroupManagementCenter: React.FC = () => {
                     key={section.id}
                     type="button"
                     onClick={() => setActiveSection(section.id)}
+                    data-sound="nav.switch"
                     aria-current={isActive ? 'page' : undefined}
                     className={`w-full rounded-lg border px-3 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
                       isActive
@@ -374,7 +404,7 @@ export const GroupManagementCenter: React.FC = () => {
                   className="flex-1 bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   placeholder={tr('groups.createPlaceholder')}
                 />
-                <Button onClick={handleCreateGroup}>
+                <Button data-sound="none" onClick={handleCreateGroup}>
                   <Plus size={16} className="mr-2" /> {tr('groups.createAction')}
                 </Button>
               </div>
@@ -411,7 +441,7 @@ export const GroupManagementCenter: React.FC = () => {
                                 onChange={(event) => setRenameInput(event.target.value)}
                                 className="flex-1 bg-secondary/50 border border-input rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                               />
-                              <Button size="sm" onClick={submitRename}>
+                              <Button size="sm" data-sound="none" onClick={submitRename}>
                                 {tr('groups.renameSave')}
                               </Button>
                               <Button
@@ -464,6 +494,7 @@ export const GroupManagementCenter: React.FC = () => {
                             <Button
                               size="icon"
                               variant="destructive"
+                              data-sound="none"
                               onClick={() => openDeleteDialog(name)}
                               title={tr('groups.deleteAction')}
                             >
@@ -626,7 +657,7 @@ export const GroupManagementCenter: React.FC = () => {
               )}
 
               <div className="flex items-center justify-end">
-                <Button onClick={handleSubmitBatch}>{tr('groups.batch.execute')}</Button>
+                <Button data-sound="none" onClick={handleSubmitBatch}>{tr('groups.batch.execute')}</Button>
               </div>
 
               {batchResult && (
@@ -670,7 +701,8 @@ export const GroupManagementCenter: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setDeleteDialog(null)}
+                data-sound="none"
+                onClick={() => closeDeleteDialog()}
                 className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 <X size={16} />
@@ -716,10 +748,10 @@ export const GroupManagementCenter: React.FC = () => {
             {deleteDialog.error && <p className="text-sm text-destructive">{deleteDialog.error}</p>}
 
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDeleteDialog(null)}>
+              <Button variant="outline" data-sound="none" onClick={() => closeDeleteDialog()}>
                 {tr('common.cancel')}
               </Button>
-              <Button variant="destructive" onClick={submitDelete}>
+              <Button variant="destructive" data-sound="none" onClick={submitDelete}>
                 {tr('groups.deleteConfirm')}
               </Button>
             </div>

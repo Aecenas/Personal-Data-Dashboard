@@ -11,6 +11,7 @@ import {
   AppLanguage,
   SectionMarker,
   GroupEntity,
+  InteractionSoundConfig,
 } from './types';
 import {
   BACKUP_INTERVAL_VALUES,
@@ -879,6 +880,26 @@ const DEFAULT_BACKUP_CONFIG: BackupConfig = {
   schedule: DEFAULT_BACKUP_SCHEDULE,
 };
 
+const DEFAULT_INTERACTION_SOUND_CONFIG: InteractionSoundConfig = {
+  enabled: true,
+  volume: 65,
+  engine: 'web_audio_native_v1',
+};
+
+const normalizeInteractionSoundConfig = (
+  config: Partial<InteractionSoundConfig> | undefined | null,
+): InteractionSoundConfig => {
+  const parsedVolume = Number.parseInt(String(config?.volume ?? DEFAULT_INTERACTION_SOUND_CONFIG.volume), 10);
+  const volume = Number.isFinite(parsedVolume)
+    ? Math.max(0, Math.min(100, parsedVolume))
+    : DEFAULT_INTERACTION_SOUND_CONFIG.volume;
+  return {
+    enabled: config?.enabled !== false,
+    volume,
+    engine: 'web_audio_native_v1',
+  };
+};
+
 const getBackupScheduleTime = (schedule: BackupSchedule): { hour: number; minute: number } => {
   if (schedule.mode === 'daily' || schedule.mode === 'weekly') {
     return { hour: schedule.hour, minute: schedule.minute };
@@ -893,6 +914,7 @@ interface NormalizedSettingsForStore {
   groups: GroupEntity[];
   activeGroup: string;
   backupConfig: BackupConfig;
+  interactionSoundConfig: InteractionSoundConfig;
 }
 
 const normalizeSettingsForStore = (settings: AppSettings): NormalizedSettingsForStore => {
@@ -922,6 +944,7 @@ const normalizeSettingsForStore = (settings: AppSettings): NormalizedSettingsFor
     groups,
     activeGroup,
     backupConfig: storageMigration.normalizeBackupConfig(settings.backup_config ?? DEFAULT_BACKUP_CONFIG),
+    interactionSoundConfig: normalizeInteractionSoundConfig(settings.interaction_sound),
   };
 };
 
@@ -944,6 +967,8 @@ interface AppState {
   backupRetentionCount: number;
   backupAutoEnabled: boolean;
   backupSchedule: BackupSchedule;
+  interactionSoundEnabled: boolean;
+  interactionSoundVolume: number;
   defaultPythonPath?: string;
   refreshConcurrencyLimit: number;
   executionHistoryLimit: number;
@@ -964,6 +989,8 @@ interface AppState {
   setBackupIntervalMinutes: (minutes: BackupIntervalMinutes) => void;
   setBackupDailyTime: (hour: number, minute: number) => void;
   setBackupWeeklySchedule: (weekday: BackupWeekday, hour: number, minute: number) => void;
+  setInteractionSoundEnabled: (enabled: boolean) => void;
+  setInteractionSoundVolume: (volume: number) => void;
   setRefreshConcurrencyLimit: (limit: number) => void;
   setExecutionHistoryLimit: (limit: number) => void;
   applyImportedSettings: (settings: AppSettings) => Promise<void>;
@@ -1013,6 +1040,8 @@ export const buildSettingsPayload = (state: Pick<
   | 'backupRetentionCount'
   | 'backupAutoEnabled'
   | 'backupSchedule'
+  | 'interactionSoundEnabled'
+  | 'interactionSoundVolume'
   | 'activeGroup'
   | 'groups'
   | 'cards'
@@ -1031,6 +1060,11 @@ export const buildSettingsPayload = (state: Pick<
     retention_count: state.backupRetentionCount,
     auto_backup_enabled: state.backupAutoEnabled,
     schedule: state.backupSchedule,
+  }),
+  interaction_sound: normalizeInteractionSoundConfig({
+    enabled: state.interactionSoundEnabled,
+    volume: state.interactionSoundVolume,
+    engine: 'web_audio_native_v1',
   }),
   activeGroup: state.activeGroup,
   groups: state.groups,
@@ -1057,6 +1091,8 @@ export const useStore = create<AppState>((set, get) => ({
   backupRetentionCount: DEFAULT_BACKUP_CONFIG.retention_count,
   backupAutoEnabled: DEFAULT_BACKUP_CONFIG.auto_backup_enabled,
   backupSchedule: DEFAULT_BACKUP_CONFIG.schedule,
+  interactionSoundEnabled: DEFAULT_INTERACTION_SOUND_CONFIG.enabled,
+  interactionSoundVolume: DEFAULT_INTERACTION_SOUND_CONFIG.volume,
   defaultPythonPath: undefined,
   refreshConcurrencyLimit: DEFAULT_REFRESH_CONCURRENCY,
   executionHistoryLimit: DEFAULT_EXECUTION_HISTORY_LIMIT,
@@ -1172,6 +1208,14 @@ export const useStore = create<AppState>((set, get) => ({
         },
       };
     }),
+  setInteractionSoundEnabled: (enabled) =>
+    set({
+      interactionSoundEnabled: Boolean(enabled),
+    }),
+  setInteractionSoundVolume: (volume) =>
+    set({
+      interactionSoundVolume: normalizeInteractionSoundConfig({ volume }).volume,
+    }),
   setRefreshConcurrencyLimit: (limit) => set({ refreshConcurrencyLimit: clampRefreshConcurrency(limit) }),
   setExecutionHistoryLimit: (limit) =>
     set((state) => {
@@ -1215,6 +1259,8 @@ export const useStore = create<AppState>((set, get) => ({
         backupRetentionCount: normalized.backupConfig.retention_count,
         backupAutoEnabled: normalized.backupConfig.auto_backup_enabled,
         backupSchedule: normalized.backupConfig.schedule,
+        interactionSoundEnabled: normalized.interactionSoundConfig.enabled,
+        interactionSoundVolume: normalized.interactionSoundConfig.volume,
         activeGroup: normalized.activeGroup,
         defaultPythonPath: persisted.default_python_path,
         dataPath: currentPath,
@@ -1228,6 +1274,9 @@ export const useStore = create<AppState>((set, get) => ({
         persisted.backup_config?.auto_backup_enabled !== normalized.backupConfig.auto_backup_enabled ||
         JSON.stringify(persisted.backup_config?.schedule) !== JSON.stringify(normalized.backupConfig.schedule) ||
         persisted.backup_config?.directory !== normalized.backupConfig.directory ||
+        persisted.interaction_sound?.enabled !== normalized.interactionSoundConfig.enabled ||
+        persisted.interaction_sound?.volume !== normalized.interactionSoundConfig.volume ||
+        persisted.interaction_sound?.engine !== normalized.interactionSoundConfig.engine ||
         persisted.activeGroup !== normalized.activeGroup ||
         JSON.stringify(persisted.groups ?? []) !== JSON.stringify(normalized.groups)
       ) {
@@ -1239,6 +1288,7 @@ export const useStore = create<AppState>((set, get) => ({
           cards: normalized.cards,
           section_markers: normalized.sectionMarkers,
           backup_config: normalized.backupConfig,
+          interaction_sound: normalized.interactionSoundConfig,
         });
       }
       return;
@@ -1281,6 +1331,7 @@ export const useStore = create<AppState>((set, get) => ({
       cards: normalized.cards,
       section_markers: normalized.sectionMarkers,
       backup_config: normalized.backupConfig,
+      interaction_sound: normalized.interactionSoundConfig,
     };
 
     set({
@@ -1297,6 +1348,8 @@ export const useStore = create<AppState>((set, get) => ({
       backupRetentionCount: normalized.backupConfig.retention_count,
       backupAutoEnabled: normalized.backupConfig.auto_backup_enabled,
       backupSchedule: normalized.backupConfig.schedule,
+      interactionSoundEnabled: normalized.interactionSoundConfig.enabled,
+      interactionSoundVolume: normalized.interactionSoundConfig.volume,
       activeGroup: normalized.activeGroup,
       defaultPythonPath: settings.default_python_path,
       dataPath: displayPath,

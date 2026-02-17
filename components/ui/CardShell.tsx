@@ -378,6 +378,7 @@ export const CardShell: React.FC<CardShellProps> = ({
               onClick={(event) => event.stopPropagation()}
             >
               <button
+                data-sound="none"
                 className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   onRefresh?.();
@@ -387,6 +388,7 @@ export const CardShell: React.FC<CardShellProps> = ({
                 <RefreshCw size={12} className="mr-2" /> {tr('cardShell.refresh')}
               </button>
               <button
+                data-sound="none"
                 className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   onEdit?.();
@@ -396,6 +398,7 @@ export const CardShell: React.FC<CardShellProps> = ({
                 <Settings size={12} className="mr-2" /> {tr('cardShell.edit')}
               </button>
               <button
+                data-sound="none"
                 className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   onCopy?.();
@@ -405,6 +408,7 @@ export const CardShell: React.FC<CardShellProps> = ({
                 <Copy size={12} className="mr-2" /> {tr('cardShell.copy')}
               </button>
               <button
+                data-sound="none"
                 className="flex w-full items-center rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   onHistory?.();
@@ -414,6 +418,7 @@ export const CardShell: React.FC<CardShellProps> = ({
                 <History size={12} className="mr-2" /> {tr('cardShell.history')}
               </button>
               <button
+                data-sound="action.destructive"
                 onClick={() => {
                   softDeleteCard(card.id);
                   setMenuOpen(false);

@@ -10,6 +10,7 @@ import { GroupManagementCenter } from './components/GroupManagementCenter';
 import { storageService } from './services/storage';
 import { clampDashboardColumns, DEFAULT_DASHBOARD_COLUMNS } from './grid';
 import { BackupSchedule } from './types';
+import { interactionSoundService, isInteractionSoundEvent, InteractionSoundEvent } from './services/interaction-sound';
 
 const DEFAULT_WINDOW_WIDTH = 1380;
 const WINDOW_MIN_WIDTH = 730;
@@ -29,6 +30,18 @@ const MAX_SCREEN_SCALE = 1.7;
 
 const isTauri = () => typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const CLICKABLE_SOUND_TARGET_SELECTOR =
+  '[data-sound],button,[role="button"],a[href],input[type="button"],input[type="submit"],input[type="reset"]';
+const TOGGLE_SOUND_TARGET_SELECTOR = 'input[type="checkbox"],input[type="radio"],select';
+
+const parseDataSound = (value: string | null): InteractionSoundEvent | 'none' | null => {
+  if (!value) return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized === 'none') return 'none';
+  if (isInteractionSoundEvent(normalized)) return normalized;
+  return null;
+};
 
 interface WindowSizingOptions {
   columns: number;
@@ -132,6 +145,8 @@ const App: React.FC = () => {
     backupRetentionCount,
     backupAutoEnabled,
     backupSchedule,
+    interactionSoundEnabled,
+    interactionSoundVolume,
     refreshAllCards,
     refreshCard,
   } = useStore();
@@ -163,6 +178,44 @@ const App: React.FC = () => {
   useEffect(() => {
     window.document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    interactionSoundService.setEnabled(interactionSoundEnabled);
+    interactionSoundService.setVolume(interactionSoundVolume);
+  }, [interactionSoundEnabled, interactionSoundVolume]);
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const clickable = target.closest(CLICKABLE_SOUND_TARGET_SELECTOR);
+      if (!clickable) return;
+
+      const explicit = parseDataSound(target.closest('[data-sound]')?.getAttribute('data-sound') ?? null);
+      if (explicit === 'none') return;
+
+      interactionSoundService.play(explicit ?? 'ui.tap');
+    };
+
+    const handleChange = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!target.matches(TOGGLE_SOUND_TARGET_SELECTOR)) return;
+
+      const explicit = parseDataSound(target.closest('[data-sound]')?.getAttribute('data-sound') ?? null);
+      if (explicit === 'none') return;
+
+      interactionSoundService.play(explicit ?? 'toggle.change');
+    };
+
+    document.addEventListener('click', handleClick, true);
+    document.addEventListener('change', handleChange, true);
+    return () => {
+      document.removeEventListener('click', handleClick, true);
+      document.removeEventListener('change', handleChange, true);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -362,16 +415,19 @@ const App: React.FC = () => {
   }, [isInitialized, refreshAllCards]);
 
   const openCreateWizard = () => {
+    interactionSoundService.play('modal.open');
     setEditingCardId(null);
     setWizardOpen(true);
   };
 
   const openEditWizard = (cardId: string) => {
+    interactionSoundService.play('modal.open');
     setEditingCardId(cardId);
     setWizardOpen(true);
   };
 
   const closeWizard = () => {
+    interactionSoundService.play('modal.close');
     setWizardOpen(false);
     setEditingCardId(null);
   };

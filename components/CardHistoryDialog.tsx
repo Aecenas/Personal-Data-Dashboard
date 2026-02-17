@@ -93,7 +93,7 @@ export const CardHistoryDialog: React.FC<CardHistoryDialogProps> = ({ card, onCl
               })}
             </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" data-sound="none" onClick={onClose}>
             <X size={16} />
           </Button>
         </div>

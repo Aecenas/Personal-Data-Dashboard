@@ -34,6 +34,7 @@ import {
   MAX_EXECUTION_HISTORY_LIMIT,
   MIN_EXECUTION_HISTORY_LIMIT,
 } from '../services/diagnostics';
+import { interactionSoundService } from '../services/interaction-sound';
 
 type SettingsSectionId = 'general' | 'storage' | 'runtime' | 'notifications';
 
@@ -94,6 +95,10 @@ export const Settings = () => {
     setBackupIntervalMinutes,
     setBackupDailyTime,
     setBackupWeeklySchedule,
+    interactionSoundEnabled,
+    interactionSoundVolume,
+    setInteractionSoundEnabled,
+    setInteractionSoundVolume,
     applyImportedSettings,
     defaultPythonPath,
     setDefaultPythonPath,
@@ -367,6 +372,7 @@ export const Settings = () => {
                 key={section.id}
                 type="button"
                 onClick={() => setActiveSection(section.id)}
+                data-sound="nav.switch"
                 aria-current={isActive ? 'page' : undefined}
                 className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                   isActive
@@ -397,6 +403,7 @@ export const Settings = () => {
                     key={section.id}
                     type="button"
                     onClick={() => setActiveSection(section.id)}
+                    data-sound="nav.switch"
                     aria-current={isActive ? 'page' : undefined}
                     className={`w-full rounded-lg border px-3 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
                       isActive
@@ -445,6 +452,7 @@ export const Settings = () => {
                   <button
                     type="button"
                     onClick={() => setTheme('light')}
+                    data-sound="toggle.change"
                     className={`p-2 rounded-md flex items-center gap-2 text-sm transition-all ${
                       theme === 'light'
                         ? 'bg-background text-foreground shadow-sm'
@@ -457,6 +465,7 @@ export const Settings = () => {
                   <button
                     type="button"
                     onClick={() => setTheme('dark')}
+                    data-sound="toggle.change"
                     className={`p-2 rounded-md flex items-center gap-2 text-sm transition-all ${
                       theme === 'dark'
                         ? 'bg-background text-foreground shadow-sm'
@@ -521,6 +530,73 @@ export const Settings = () => {
                     <span className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] transition-transform peer-checked:translate-x-5" />
                   </div>
                 </label>
+              </div>
+
+              <div className="mt-6 border-t border-border/60 pt-5 space-y-4">
+                <div className="space-y-1">
+                  <p className="font-medium">{tr('settings.interactionSound')}</p>
+                  <p className="text-sm text-muted-foreground">{tr('settings.interactionSoundDesc')}</p>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="font-medium">{tr('settings.interactionSoundEnabled')}</p>
+                    <p className="text-xs text-muted-foreground">{tr('settings.interactionSoundEnabledDesc')}</p>
+                  </div>
+                  <label className="inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      data-sound="none"
+                      checked={interactionSoundEnabled}
+                      onChange={(event) => {
+                        const nextEnabled = event.target.checked;
+                        if (nextEnabled) {
+                          interactionSoundService.setEnabled(true);
+                        }
+                        interactionSoundService.play('toggle.change');
+                        setInteractionSoundEnabled(nextEnabled);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="relative w-11 h-6 rounded-full border border-border/70 bg-secondary/80 shadow-inner transition-colors peer-checked:bg-emerald-500 peer-checked:border-emerald-500/80">
+                      <span className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] transition-transform peer-checked:translate-x-5" />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium">{tr('settings.interactionSoundVolume')}</p>
+                    <span className="text-sm text-muted-foreground">{interactionSoundVolume}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{tr('settings.interactionSoundVolumeDesc')}</p>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={interactionSoundVolume}
+                    onChange={(event) => setInteractionSoundVolume(Number.parseInt(event.target.value, 10))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    data-sound="none"
+                    onClick={() => interactionSoundService.play('ui.tap')}
+                  >
+                    {tr('settings.interactionSoundTestTap')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    data-sound="none"
+                    onClick={() => interactionSoundService.play('action.success')}
+                  >
+                    {tr('settings.interactionSoundTestSuccess')}
+                  </Button>
+                </div>
               </div>
             </div>
           )}

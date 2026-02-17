@@ -230,6 +230,12 @@ export interface GroupEntity {
   order: number;
 }
 
+export interface InteractionSoundConfig {
+  enabled: boolean;
+  volume: number;
+  engine: 'web_audio_native_v1';
+}
+
 export interface AppSettings {
   schema_version: number;
   theme: 'dark' | 'light';
@@ -239,6 +245,7 @@ export interface AppSettings {
   refresh_concurrency_limit: number;
   execution_history_limit: number;
   backup_config: BackupConfig;
+  interaction_sound: InteractionSoundConfig;
   activeGroup: string;
   groups: GroupEntity[];
   cards: Card[];

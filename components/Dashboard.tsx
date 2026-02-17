@@ -11,6 +11,7 @@ import { Card, SectionMarker } from '../types';
 import { t } from '../i18n';
 import { getCardLayoutPosition } from '../layout';
 import { CardHistoryDialog } from './CardHistoryDialog';
+import { interactionSoundService } from '../services/interaction-sound';
 
 interface DashboardProps {
   onAddClick: () => void;
@@ -260,8 +261,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
       );
 
       if (!moved) {
+        interactionSoundService.play('card.blocked');
         setFailedMoveSignal((value) => ({ cardId: selectedCardId, nonce: value.nonce + 1 }));
+        return;
       }
+      interactionSoundService.play('card.move');
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -290,6 +294,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   };
 
   const openSectionCreateDialog = () => {
+    interactionSoundService.play('modal.open');
     const defaultTitle = tr('dashboard.sectionDefaultTitle', { index: displayedSections.length + 1 });
     const defaultAfterRow = selectedCard
       ? selectedCard.ui_config.y + getCardHeight(selectedCard.ui_config.size)
@@ -308,6 +313,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   };
 
   const openSectionEditDialog = (section: SectionMarker) => {
+    interactionSoundService.play('modal.open');
     setSectionDialog({
       mode: 'edit',
       targetId: section.id,
@@ -321,13 +327,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     setSectionDialogError('');
   };
 
-  const closeSectionDialog = () => {
+  const closeSectionDialog = (playSound = true) => {
+    if (playSound) interactionSoundService.play('modal.close');
     setSectionDialog(null);
     setSectionDialogError('');
   };
 
   const handleDeleteSection = (section: SectionMarker) => {
     if (!window.confirm(tr('dashboard.sectionDeleteConfirm'))) return;
+    interactionSoundService.play('action.destructive');
     removeSectionMarker(section.id);
   };
 
@@ -336,12 +344,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
 
     const parsedRow = Number.parseInt(sectionDialog.rowInput.trim(), 10);
     if (!Number.isFinite(parsedRow) || parsedRow < 0) {
+      interactionSoundService.play('action.error');
       setSectionDialogError(tr('dashboard.sectionInvalidRow'));
       return;
     }
 
     const parsedLineWidth = Number.parseInt(String(sectionDialog.lineWidth), 10);
     if (!Number.isFinite(parsedLineWidth) || parsedLineWidth < 1 || parsedLineWidth > 4) {
+      interactionSoundService.play('action.error');
       setSectionDialogError(tr('dashboard.sectionInvalidWidth'));
       return;
     }
@@ -359,7 +369,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
 
     if (sectionDialog.mode === 'edit' && sectionDialog.targetId) {
       updateSectionMarker(sectionDialog.targetId, normalizedPayload);
-      closeSectionDialog();
+      interactionSoundService.play('action.success');
+      closeSectionDialog(false);
       return;
     }
 
@@ -377,7 +388,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
       line_width: normalizedPayload.line_width,
       label_align: normalizedPayload.label_align,
     });
-    closeSectionDialog();
+    interactionSoundService.play('action.success');
+    closeSectionDialog(false);
   };
 
   const updateSectionDialog = <K extends keyof SectionDialogState>(key: K, value: SectionDialogState[K]) => {
@@ -390,6 +402,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
   };
 
   const openCopyDialog = (card: Card) => {
+    interactionSoundService.play('modal.open');
     setCopyDialog({
       sourceCardId: card.id,
       titleInput: `${card.title}_Copy`,
@@ -398,7 +411,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     });
   };
 
-  const closeCopyDialog = () => {
+  const closeCopyDialog = (playSound = true) => {
+    if (playSound) interactionSoundService.play('modal.close');
     setCopyDialog(null);
   };
 
@@ -411,6 +425,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
 
     const title = copyDialog.titleInput.trim();
     if (!title) {
+      interactionSoundService.play('action.error');
       updateCopyDialog({ error: tr('dashboard.copyErrorTitleRequired') });
       return;
     }
@@ -418,6 +433,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     const targetGroup = copyDialog.groupInput.trim();
     const groupNames = groups.map((group) => group.name);
     if (!groupNames.includes(targetGroup)) {
+      interactionSoundService.play('action.error');
       updateCopyDialog({ error: tr('dashboard.copyErrorGroupInvalid') });
       return;
     }
@@ -428,6 +444,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
     });
 
     if ('error' in result) {
+      interactionSoundService.play('action.error');
       if (result.error === 'not_found') {
         updateCopyDialog({ error: tr('dashboard.copyErrorSourceMissing') });
         return;
@@ -444,7 +461,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
       return;
     }
 
-    closeCopyDialog();
+    interactionSoundService.play('action.success');
+    closeCopyDialog(false);
+  };
+
+  const handleRefreshAll = () => {
+    interactionSoundService.play('refresh.trigger');
+    void refreshAllCards('manual');
+  };
+
+  const handleRefreshCard = (cardId: string) => {
+    interactionSoundService.play('refresh.trigger');
+    void refreshCard(cardId);
+  };
+
+  const openHistoryDialog = (cardId: string) => {
+    interactionSoundService.play('modal.open');
+    setHistoryCardId(cardId);
+  };
+
+  const closeHistoryDialog = () => {
+    interactionSoundService.play('modal.close');
+    setHistoryCardId(null);
   };
 
   const renderCard = (card: Card) => {
@@ -466,6 +504,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
             <>
               <Button
                 onClick={handleAddSection}
+                data-sound="none"
                 variant="outline"
                 className="border-dashed"
               >
@@ -481,7 +520,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
             </>
           ) : (
             <>
-              <Button onClick={() => refreshAllCards('manual')} variant="outline">
+              <Button onClick={handleRefreshAll} data-sound="none" variant="outline">
                 <RefreshCw size={16} className="mr-2" /> {tr('dashboard.refreshAll')}
               </Button>
               <Button onClick={handleToggleEditMode} variant="outline">
@@ -489,6 +528,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
               </Button>
               <Button
                 onClick={onAddClick}
+                data-sound="none"
                 className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
               >
                 <Plus size={16} className="mr-2" /> {tr('dashboard.addCard')}
@@ -503,6 +543,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
           <button
             key={group}
             onClick={() => setActiveGroup(group)}
+            data-sound="nav.switch"
             className={`
               px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap
               ${
@@ -535,7 +576,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
         {displayedCards.length === 0 && !isEditMode ? (
           <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border rounded-xl bg-card/30 mt-8">
             <p className="text-muted-foreground">{tr('dashboard.noMetricsInGroup')}</p>
-            <Button variant="link" onClick={onAddClick} className="mt-2">
+            <Button variant="link" onClick={onAddClick} data-sound="none" className="mt-2">
               {tr('dashboard.createFirstCard')}
             </Button>
           </div>
@@ -604,6 +645,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                           {isEditMode ? (
                             <button
                               type="button"
+                              data-sound="none"
                               className={`relative max-w-full truncate rounded-full border px-3 py-0.5 text-xs pointer-events-auto ${
                                 getSectionTone(section.line_color).badge
                               }`}
@@ -688,10 +730,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                 isSelected={selectedCardId === card.id}
                 failedMoveSignal={failedMoveSignal.cardId === card.id ? failedMoveSignal.nonce : undefined}
                 onSelect={() => setSelectedCardId(card.id)}
-                onRefresh={() => refreshCard(card.id)}
+                onRefresh={() => handleRefreshCard(card.id)}
                 onEdit={() => onEditCard(card.id)}
                 onCopy={() => openCopyDialog(card)}
-                onHistory={() => setHistoryCardId(card.id)}
+                onHistory={() => openHistoryDialog(card.id)}
               >
                 {renderCard(card)}
               </CardShell>
@@ -705,7 +747,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
           <div className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h3 className="text-base font-semibold text-foreground">{tr('dashboard.copyDialogTitle')}</h3>
-              <Button variant="ghost" size="icon" onClick={closeCopyDialog}>
+              <Button variant="ghost" size="icon" data-sound="none" onClick={() => closeCopyDialog()}>
                 <X size={16} />
               </Button>
             </div>
@@ -745,10 +787,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
             </div>
 
             <div className="border-t border-border px-4 py-3 flex items-center justify-end gap-2">
-              <Button variant="ghost" onClick={closeCopyDialog}>
+              <Button variant="ghost" data-sound="none" onClick={() => closeCopyDialog()}>
                 {tr('common.cancel')}
               </Button>
-              <Button onClick={handleSubmitCopyDialog}>{tr('dashboard.copyConfirm')}</Button>
+              <Button data-sound="none" onClick={handleSubmitCopyDialog}>{tr('dashboard.copyConfirm')}</Button>
             </div>
           </div>
         </div>
@@ -763,7 +805,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                   ? tr('dashboard.sectionDialogCreateTitle')
                   : tr('dashboard.sectionDialogEditTitle')}
               </h3>
-              <Button variant="ghost" size="icon" onClick={closeSectionDialog}>
+              <Button variant="ghost" size="icon" data-sound="none" onClick={() => closeSectionDialog()}>
                 <X size={16} />
               </Button>
             </div>
@@ -872,16 +914,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
-              <Button variant="ghost" onClick={closeSectionDialog}>
+              <Button variant="ghost" data-sound="none" onClick={() => closeSectionDialog()}>
                 {tr('common.cancel')}
               </Button>
-              <Button onClick={handleSubmitSectionDialog}>{tr('common.save')}</Button>
+              <Button data-sound="none" onClick={handleSubmitSectionDialog}>{tr('common.save')}</Button>
             </div>
           </div>
         </div>
       )}
 
-      <CardHistoryDialog card={historyCard} onClose={() => setHistoryCardId(null)} />
+      <CardHistoryDialog card={historyCard} onClose={closeHistoryDialog} />
     </div>
   );
 };

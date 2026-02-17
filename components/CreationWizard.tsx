@@ -34,6 +34,7 @@ import { executionService, ExecutionResult } from '../services/execution';
 import { ArgParseError, formatScriptArgs, parseScriptArgs } from '../services/arg-parser';
 import { normalizeAlertConfig } from '../services/alerts';
 import { t } from '../i18n';
+import { interactionSoundService } from '../services/interaction-sound';
 
 interface CreationWizardProps {
   onClose: () => void;
@@ -436,10 +437,24 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
 
   const resolveGroupErrorMessage = (error: string) => tr(groupMutationErrorKeyMap[error] ?? 'groups.error.generic');
 
+  const openCreateGroupDialog = () => {
+    interactionSoundService.play('modal.open');
+    setCreateGroupError('');
+    setCreateGroupOpen(true);
+  };
+
+  const closeCreateGroupDialog = (playSound = true) => {
+    if (playSound) interactionSoundService.play('modal.close');
+    setCreateGroupOpen(false);
+    setCreateGroupError('');
+    setCreateGroupName('');
+  };
+
   const submitCreateGroup = () => {
     setCreateGroupError('');
     const result = createGroup(createGroupName);
     if ('error' in result) {
+      interactionSoundService.play('action.error');
       setCreateGroupError(resolveGroupErrorMessage(result.error));
       return;
     }
@@ -448,8 +463,8 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     if (normalizedName) {
       updateForm('group', normalizedName);
     }
-    setCreateGroupName('');
-    setCreateGroupOpen(false);
+    interactionSoundService.play('action.success');
+    closeCreateGroupDialog(false);
   };
 
   const validateStep = (targetStep: number): boolean => {
@@ -594,9 +609,11 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
   const runTest = async () => {
     const valid = validateAllRequiredSteps();
     if (!valid) {
+      interactionSoundService.play('action.error');
       return;
     }
 
+    interactionSoundService.play('refresh.trigger');
     setIsTesting(true);
     const result = await executionService.runDraft({
       type: form.type,
@@ -609,12 +626,18 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     });
 
     setTestResult(result);
+    if (!result.ok) {
+      interactionSoundService.play('action.error');
+    }
     setIsTesting(false);
   };
 
   const handleSubmit = async () => {
     const valid = validateAllRequiredSteps();
-    if (!valid) return;
+    if (!valid) {
+      interactionSoundService.play('action.error');
+      return;
+    }
 
     const mappingConfig = buildMappingConfig(form);
     const alertConfig = buildAlertConfig();
@@ -659,6 +682,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       });
 
       await refreshCard(editingCard.id);
+      interactionSoundService.play('action.success');
       onClose();
       return;
     }
@@ -729,12 +753,16 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
 
     addCard(newCard);
     await refreshCard(newCardId);
+    interactionSoundService.play('action.success');
     onClose();
   };
 
   const goNext = () => {
     const ok = validateStep(step);
-    if (!ok) return;
+    if (!ok) {
+      interactionSoundService.play('action.error');
+      return;
+    }
 
     if (step < 5) setStep((prev) => prev + 1);
   };
@@ -775,7 +803,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
                 </option>
               ))}
             </select>
-            <Button type="button" variant="outline" onClick={() => setCreateGroupOpen(true)}>
+            <Button type="button" variant="outline" data-sound="none" onClick={openCreateGroupDialog}>
               <Plus size={14} className="mr-1" /> {tr('wizard.groupCreate')}
             </Button>
           </div>
@@ -1479,6 +1507,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         </div>
         <Button
           onClick={runTest}
+          data-sound="none"
           disabled={isTesting || scriptValidation.status !== 'valid' || Boolean(parsedArgs.error)}
         >
           {isTesting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Play size={16} className="mr-2" />}{' '}
@@ -1531,7 +1560,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
             </h2>
             <p className="text-sm text-muted-foreground">{tr('wizard.subtitle')}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" data-sound="none" onClick={onClose}>
             <X size={20} />
           </Button>
         </div>
@@ -1630,11 +1659,8 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
               <h3 className="text-lg font-semibold">{tr('wizard.groupCreateDialogTitle')}</h3>
               <button
                 type="button"
-                onClick={() => {
-                  setCreateGroupOpen(false);
-                  setCreateGroupError('');
-                  setCreateGroupName('');
-                }}
+                data-sound="none"
+                onClick={() => closeCreateGroupDialog()}
                 className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 <X size={16} />
@@ -1662,15 +1688,12 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setCreateGroupOpen(false);
-                  setCreateGroupError('');
-                  setCreateGroupName('');
-                }}
+                data-sound="none"
+                onClick={() => closeCreateGroupDialog()}
               >
                 {tr('common.cancel')}
               </Button>
-              <Button type="button" onClick={submitCreateGroup}>
+              <Button type="button" data-sound="none" onClick={submitCreateGroup}>
                 {tr('wizard.groupCreateConfirm')}
               </Button>
             </div>

@@ -61,7 +61,7 @@ describe('storage migration', () => {
 
     const migrated = storageMigration.migrateToLatest(legacy);
 
-    expect(migrated.schema_version).toBe(5);
+    expect(migrated.schema_version).toBe(6);
     expect(migrated.language).toBe('zh-CN');
     expect(migrated.dashboard_columns).toBe(4);
     expect(migrated.adaptive_window_enabled).toBe(true);
@@ -95,6 +95,11 @@ describe('storage migration', () => {
         hour: 3,
         minute: 0,
       },
+    });
+    expect(migrated.interaction_sound).toEqual({
+      enabled: true,
+      volume: 65,
+      engine: 'web_audio_native_v1',
     });
 
     const card = migrated.cards[0];
@@ -248,6 +253,22 @@ describe('storage migration', () => {
       ],
     });
     expect(migrated.execution_history_limit).toBe(80);
+  });
+
+  it('normalizes interaction sound config when migrating', () => {
+    const migrated = storageMigration.migrateToLatest({
+      interaction_sound: {
+        enabled: false,
+        volume: 999,
+        engine: 'custom',
+      },
+    });
+
+    expect(migrated.interaction_sound).toEqual({
+      enabled: false,
+      volume: 100,
+      engine: 'web_audio_native_v1',
+    });
   });
 });
 

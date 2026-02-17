@@ -57,6 +57,7 @@ export const Sidebar = () => {
             <button
               key={item.id}
               onClick={() => setView(item.id)}
+              data-sound="nav.switch"
               className={`
                 w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                 ${isActive 
@@ -78,6 +79,7 @@ export const Sidebar = () => {
       <div className="p-4 border-t border-border flex justify-end">
         <button 
           onClick={toggleSidebar}
+          data-sound="toggle.change"
           className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
         >
           {sidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}

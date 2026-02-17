@@ -169,6 +169,7 @@ export const Diagnostics: React.FC = () => {
                 key={section.id}
                 type="button"
                 onClick={() => setActiveSection(section.id)}
+                data-sound="nav.switch"
                 aria-current={isActive ? 'page' : undefined}
                 className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                   isActive
@@ -199,6 +200,7 @@ export const Diagnostics: React.FC = () => {
                     key={section.id}
                     type="button"
                     onClick={() => setActiveSection(section.id)}
+                    data-sound="nav.switch"
                     aria-current={isActive ? 'page' : undefined}
                     className={`w-full rounded-lg border px-3 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
                       isActive
