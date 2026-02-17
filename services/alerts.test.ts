@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateCardAlert } from './alerts';
+import { evaluateCardAlert, isThresholdAlertActive } from './alerts';
 
 describe('alert evaluation', () => {
   it('does not trigger for first status sample but records last state', () => {
@@ -151,5 +151,38 @@ describe('alert evaluation', () => {
       value: 88,
       threshold: 80,
     });
+  });
+
+  it('reports threshold alert as active while value remains beyond threshold', () => {
+    const active = isThresholdAlertActive({
+      cardType: 'scalar',
+      payload: {
+        value: 95,
+        unit: '%',
+      },
+      config: {
+        enabled: true,
+        cooldown_sec: 60,
+        upper_threshold: 90,
+      },
+    });
+
+    expect(active).toBe(true);
+  });
+
+  it('reports threshold alert as inactive for non-threshold card types', () => {
+    const active = isThresholdAlertActive({
+      cardType: 'status',
+      payload: {
+        label: 'API',
+        state: 'error',
+      },
+      config: {
+        enabled: true,
+        cooldown_sec: 60,
+      },
+    });
+
+    expect(active).toBe(false);
   });
 });

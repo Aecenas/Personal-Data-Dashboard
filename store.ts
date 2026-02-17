@@ -26,6 +26,7 @@ import { executionService } from './services/execution';
 import {
   AlertTriggerEvent,
   evaluateCardAlert,
+  isThresholdAlertActive,
   normalizeAlertConfig,
   normalizeAlertState,
 } from './services/alerts';
@@ -736,12 +737,17 @@ const hydrateRuntimeData = (card: Card): Card => {
   const cachedPayload = card.cache_data?.last_success_payload;
 
   if (cachedPayload) {
+    const thresholdAlertTriggered = isThresholdAlertActive({
+      cardType: card.type,
+      payload: cachedPayload,
+      config: card.alert_config,
+    });
     const runtimeData: CardRuntimeData = {
       state: 'success',
       isLoading: false,
       source: 'cache',
       payload: cachedPayload,
-      thresholdAlertTriggered: false,
+      thresholdAlertTriggered,
       lastUpdated: card.cache_data?.last_success_at,
       error: card.cache_data?.last_error,
       stderr: card.cache_data?.stderr_excerpt,
@@ -2220,7 +2226,7 @@ export const useStore = create<AppState>((set, get) => ({
                   isLoading: true,
                   source: item.runtimeData?.source ?? 'none',
                   payload: item.runtimeData?.payload ?? item.cache_data?.last_success_payload,
-                  thresholdAlertTriggered: false,
+                  thresholdAlertTriggered: Boolean(item.runtimeData?.thresholdAlertTriggered),
                   error: undefined,
                   stderr: undefined,
                   exitCode: undefined,
@@ -2247,9 +2253,11 @@ export const useStore = create<AppState>((set, get) => ({
                   state: item.alert_state,
                   now,
                 });
-                const thresholdTriggered = alertEvaluation.events.some(
-                  (event) => event.reason === 'upper_threshold' || event.reason === 'lower_threshold',
-                );
+                const thresholdAlertTriggered = isThresholdAlertActive({
+                  cardType: item.type,
+                  payload: result.payload,
+                  config: item.alert_config,
+                });
 
                 alertEvaluation.events.forEach((event) => {
                   pendingNotifications.push({
@@ -2290,7 +2298,7 @@ export const useStore = create<AppState>((set, get) => ({
                     isLoading: false,
                     source: 'live',
                     payload: result.payload,
-                    thresholdAlertTriggered: thresholdTriggered,
+                    thresholdAlertTriggered,
                     error: undefined,
                     stderr: result.rawStderr,
                     exitCode: result.exitCode,

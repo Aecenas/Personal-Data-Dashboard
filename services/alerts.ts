@@ -93,6 +93,12 @@ export interface EvaluateCardAlertInput {
   now: number;
 }
 
+export interface EvaluateThresholdAlertActiveInput {
+  cardType: CardType;
+  payload?: NormalizedCardPayload;
+  config?: Partial<CardAlertConfig>;
+}
+
 const extractNumericValue = (cardType: CardType, payload: NormalizedCardPayload): number | undefined => {
   if (cardType === 'scalar') {
     return parseFiniteNumber((payload as ScriptOutputScalar).value);
@@ -103,6 +109,28 @@ const extractNumericValue = (cardType: CardType, payload: NormalizedCardPayload)
   }
 
   return undefined;
+};
+
+export const isThresholdAlertActive = ({
+  cardType,
+  payload,
+  config,
+}: EvaluateThresholdAlertActiveInput): boolean => {
+  if (!payload) return false;
+  if (cardType !== 'scalar' && cardType !== 'gauge') return false;
+
+  const normalizedConfig = normalizeAlertConfig(config);
+  if (!normalizedConfig.enabled) return false;
+
+  const value = extractNumericValue(cardType, payload);
+  if (value === undefined) return false;
+
+  const reachedUpper =
+    normalizedConfig.upper_threshold !== undefined && value >= normalizedConfig.upper_threshold;
+  const reachedLower =
+    normalizedConfig.lower_threshold !== undefined && value <= normalizedConfig.lower_threshold;
+
+  return reachedUpper || reachedLower;
 };
 
 const shouldTrigger = (

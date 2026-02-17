@@ -1,174 +1,92 @@
-# MyMetrics
+<p align="center">
+  <img src="src-tauri/icons/icon.png" alt="MyMetrics Logo" width="108" />
+</p>
 
-MyMetrics 是一个基于 Tauri 的本地个人数据看板。  
-核心设计是“UI 与数据逻辑解耦”：前端负责展示和编排，数据由用户本地 Python 脚本产出。
+<h1 align="center">MyMetrics</h1>
 
-当前仓库版本：`v0.2.0`（`package.json` / `src-tauri/Cargo.toml`）。
+<p align="center">
+  本地优先的个人数据看板（Local-first Personal Data Dashboard）<br />
+  <strong>UI 与数据逻辑解耦：</strong>你写 Python 脚本产数，MyMetrics 负责展示、调度、告警、诊断与持久化。
+</p>
 
-## 当前版本能力总览
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/badge/version-v0.2.0-1f6feb?style=for-the-badge" />
+  <img alt="Schema" src="https://img.shields.io/badge/schema-v6-f59e0b?style=for-the-badge" />
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white" />
+  <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?style=for-the-badge&logo=react&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-16A34A?style=for-the-badge" />
+</p>
 
-- 多视图工作台：
-  - Dashboard（看板）
-  - Group Management（分组管理中心）
-  - Diagnostics（执行诊断）
-  - Recycle Bin（回收站）
-  - Settings（全局设置）
-- 5 步建卡向导（新建和编辑复用）：
-  - 基础信息
-  - 脚本与刷新配置
-  - 映射配置
-  - 告警配置
-  - 测试与预览
-- 支持 4 种卡片类型：`scalar` / `series` / `status` / `gauge`
-- 版面编辑能力：
-  - 网格布局、方向键移动、碰撞处理（同尺寸交换/异尺寸越位）
-  - 分组独立布局位置（`layout_positions`）
-  - 分段线（Section Marker）可视化分区
-- 刷新与执行：
-  - 单卡刷新 / 全量刷新
-  - 启动刷新 / 恢复焦点刷新
-  - 按卡片间隔自动刷新
-  - 并发限流队列（默认 4，可配置 1-16）
-- 告警能力：
-  - `status` 状态变化告警
-  - `scalar/gauge` 上下阈值告警
-  - 冷却时间（cooldown）抑制重复通知
-  - 桌面通知（Tauri Notification 插件）
-- 诊断能力：
-  - 每卡执行历史 ring buffer（默认 120，范围 10-500）
-  - 成功率、平均耗时、P50/P90、失败聚合
-  - 单卡历史明细弹窗
-- 存储与备份：
-  - 本地 JSON 持久化，当前 `schema_version = 6`
-  - 自动迁移旧配置
-  - 配置导入/导出
-  - 立即备份 + 自动备份（间隔/每日/每周）
-  - 备份保留数量轮转（3-20，默认 5）
+<p align="center">
+  <a href="#quick-start">快速开始</a> ·
+  <a href="#features">功能全景</a> ·
+  <a href="#data-contract">脚本协议</a> ·
+  <a href="#architecture">架构图</a> ·
+  <a href="#english-snapshot">English</a>
+</p>
 
-## 技术栈
+---
 
-- 前端：React 19 + TypeScript + Zustand + Recharts + Vite
-- 桌面运行时：Tauri v2（Rust）
-- 本地脚本执行：Python 3.x（可卡片级解释器，也可全局默认解释器）
-- 测试：Vitest（`services/**/*.test.ts`）
+## ✨ 项目亮点
 
-## 架构与关键文件
+- **本地优先**：无云端依赖，配置与数据缓存均保存在本机。
+- **高度可定制**：每张卡片绑定任意本地 Python 脚本，支持独立解释器、参数与映射。
+- **完整运行闭环**：刷新队列、失败回退、执行诊断、阈值/状态告警、桌面通知、备份轮转。
+- **面向扩展**：数据 schema 版本迁移、导入导出、分组批处理、布局多作用域（全局/分组）。
 
-- `App.tsx`
-  - 应用壳层与全局副作用：
-  - 初始化 Store
-  - 主题与语言注入
-  - 自动保存（600ms debounce）
-  - 启动刷新/恢复刷新/周期刷新
-  - 自动备份调度
-  - Tauri 窗口自适应尺寸逻辑
-- `store.ts`
-  - 全局状态 + 业务动作核心（卡片、分组、分段线、刷新、回收站、设置）
-  - 负责布局重排、批量操作、告警状态推进、执行历史写入
-  - `buildSettingsPayload` 是持久化入口结构
-- `services/execution.ts`
-  - 通过 `invoke('run_python_script')` 调 Rust 命令
-  - JSON 解析、类型校验、mapping（支持点路径）
-  - 提供 `runCard` / `runDraft` / `validateScript`
-- `services/storage.ts`
-  - 配置读写、迁移、导入导出、备份轮转
-  - `storageMigration.migrateToLatest` 是 schema 兼容关键点
-- `services/alerts.ts`
-  - 告警规则计算与 cooldown 判定
-- `services/diagnostics.ts`
-  - 执行历史 ring buffer、统计聚合、错误摘要
-- `components/`
-  - 各视图与卡片渲染
-  - `components/CreationWizard.tsx`：建卡/改卡主流程
-  - `components/Dashboard.tsx`：看板编辑与卡片交互
-  - `components/GroupManagementCenter.tsx`：分组创建/排序/批量操作
-  - `components/Diagnostics.tsx`：诊断视图
-- `src-tauri/src/commands.rs`
-  - Python 执行与校验命令：
-  - `run_python_script`
-  - `validate_python_script`
+<a id="features"></a>
+## 🧭 功能全景
 
-## 执行链路（刷新一次卡片会发生什么）
+| 模块 | 能力 |
+| --- | --- |
+| Dashboard | 网格看板、全量/单卡刷新、编辑模式、方向键移动、碰撞处理、卡片复制、Section Marker 分段线 |
+| Creation Wizard | 5 步向导（基础信息 → 脚本刷新 → 映射 → 告警 → 测试预览），新建/编辑复用 |
+| Group Management Center | 分组创建/重命名/排序/删除、分组批量操作（移动分组/更新间隔/软删除） |
+| Diagnostics | 每卡历史 ring buffer、全局执行记录、成功率、平均耗时、P50/P90、失败热点 |
+| Recycle Bin | 软删除回收、还原、永久删除、清空回收站 |
+| Settings | 主题/语言、数据目录、导入导出、备份策略、默认 Python、并发限流、历史容量、交互音效、通知权限 |
 
-1. `store.refreshCard` 入队（受 `refreshConcurrencyLimit` 限流）
-2. `executionService.runCard` 调用 Rust 命令执行 Python
-3. 解析 `stdout` JSON，校验 `type` 与 mapping
-4. 成功时：
-  - 更新 `cache_data.last_success_payload`
-  - 更新 `runtimeData`（`source: 'live'`）
-  - 追加执行历史
-  - 评估告警并触发桌面通知
-5. 失败时：
-  - 写入 `cache_data.last_error`
-  - `runtimeData` 进入 `error`（有缓存则继续展示旧 payload）
-  - 追加失败历史（含错误摘要）
+## 🧩 卡片类型
 
-## 配置存储与备份
+支持 4 类卡片，统一协议但独立映射：
 
-当前 schema：`6`
+- `scalar`：单值指标（如温度、余额、CPU）
+- `series`：时序/序列（折线或多序列图）
+- `status`：状态卡（`ok/warning/error/unknown`）
+- `gauge`：仪表盘（`min/max/value`）
 
-关键结构（简化）：
+<a id="quick-start"></a>
+## 🚀 快速开始
 
-```json
-{
-  "schema_version": 5,
-  "theme": "light | dark",
-  "language": "zh-CN | en-US",
-  "dashboard_columns": 2-6,
-  "refresh_concurrency_limit": 1-16,
-  "execution_history_limit": 10-500,
-  "backup_config": {
-    "directory": "optional path",
-    "retention_count": 3-20,
-    "auto_backup_enabled": true,
-    "schedule": {
-      "mode": "interval | daily | weekly"
-    }
-  },
-  "groups": [{ "id": "G1", "name": "Default", "order": 0 }],
-  "cards": [],
-  "section_markers": []
-}
-```
+### 1) 环境要求
 
-存储路径机制：
+- Node.js `20+`
+- npm `10+`
+- Python `3.x`
+- Rust toolchain（Tauri 2 必需）
 
-- 默认：Tauri `AppLocalData` 目录下 `data/user_settings.json`
-- 自定义路径：通过 `storage_config.json` 指针记录
-- 备份目录默认在数据目录下 `backups/`
-
-## 快速开始
-
-### 1. 环境要求
-
-- Node.js 20+
-- npm 10+
-- Python 3.x
-- Rust toolchain（Tauri 必需）
-
-### 2. 安装依赖
+### 2) 安装依赖
 
 ```bash
 npm install
 ```
 
-### 3. 开发运行
+### 3) 运行
 
-仅前端（无法真实执行本地 Python）：
+仅前端调试（不能真实调用本地 Python）：
 
 ```bash
 npm run dev
 ```
 
-Tauri 桌面模式（推荐）：
+Tauri 桌面模式（推荐，完整功能）：
 
 ```bash
 npm run tauri:dev
 ```
 
-Vite 默认端口：`3000`（`vite.config.ts` 与 `tauri.conf.json` 已对齐）。
-
-## 构建与校验
+### 4) 构建与校验
 
 ```bash
 npm run typecheck
@@ -177,10 +95,8 @@ npm run build
 npm run tauri:build
 ```
 
-CI 工作流：`.github/workflows/desktop-ci.yml`  
-会执行前端检查，并在 macOS / Windows / Linux 上构建 Tauri（debug bundle）。
-
-## Python 脚本输出契约
+<a id="data-contract"></a>
+## 🧪 脚本协议（Data Contract）
 
 脚本必须向 `stdout` 输出 JSON：
 
@@ -191,77 +107,246 @@ CI 工作流：`.github/workflows/desktop-ci.yml`
 }
 ```
 
-更多示例见：`docs/脚本数据协议与示例.md`
+### 类型字段速查
 
-补充约定：
+| type | data 要点 |
+| --- | --- |
+| `scalar` | `value`（必填），可带 `unit/trend/color` |
+| `series` | `x_axis`（数组）+ `series`（数组，元素含 `name/values`） |
+| `status` | `label/state`（必填），可带 `message` |
+| `gauge` | `min/max/value`（必填），且 `max > min` |
 
-- 映射支持点路径（如 `metrics.cpu.value`）
-- `status.state` 支持别名归一化（`success/healthy -> ok`, `warn -> warning`, `critical/danger -> error`）
-- `gauge` 要求 `max > min`
-- Rust 执行超时范围会被限制在 `1000ms - 120000ms`
+### 协议补充规则
 
-## 手动测试脚本
+- 映射支持点路径：如 `metrics.cpu.value`
+- `status.state` 别名归一化：
+  - `success/healthy -> ok`
+  - `warn -> warning`
+  - `critical/danger -> error`
+- 脚本执行超时在 Rust 侧强制约束为 `1000ms ~ 120000ms`
+- 校验脚本必须是存在的 `.py` 文件
 
-目录：`test/`
+完整示例见：[`docs/脚本数据协议与示例.md`](docs/脚本数据协议与示例.md)
 
-- 成功样例：`scalar_ok.py` / `series_ok.py` / `status_ok.py` / `gauge_ok.py`
-- 映射样例：`nested_payload.py`
-- 错误样例：`invalid_json.py` / `wrong_type.py` / `timeout_sleep.py` / `stderr_nonzero.py`
+## 🔄 执行链路
 
-说明文档：`test/README.md`
+```mermaid
+sequenceDiagram
+  participant U as User Action
+  participant S as store.refreshCard
+  participant Q as Queue (Concurrency Limit)
+  participant E as executionService
+  participant R as Rust Command
+  participant P as Python Script
 
-## 后续开发约定（重要）
+  U->>S: Refresh card / auto refresh
+  S->>Q: Enqueue
+  Q->>E: Dequeue task
+  E->>R: invoke("run_python_script")
+  R->>P: spawn python + args
+  P-->>R: stdout/stderr/exit_code
+  R-->>E: RunPythonScriptResponse
+  E->>E: parse JSON + normalize mapping
+  alt success
+    E-->>S: payload
+    S->>S: update runtimeData/cache_data/history
+    S->>S: evaluate alert + desktop notification
+  else failed
+    E-->>S: error
+    S->>S: keep last success cache (if any)
+    S->>S: append failed history + summary
+  end
+```
 
-### 1. 新增设置字段时
+<a id="architecture"></a>
+## 🧱 架构图
 
-需要同步以下位置，避免“UI 可改但不落盘”或“导入后丢字段”：
+```mermaid
+flowchart LR
+  UI["React UI (Dashboard / Wizard / Settings / Diagnostics)"] --> Store["Zustand Store (state + actions)"]
+  Store --> Services["services/* (execution / storage / alerts / diagnostics)"]
+  Services --> Tauri["Tauri invoke commands"]
+  Tauri --> Rust["Rust commands.rs"]
+  Rust --> Python["Local Python Script"]
+  Services --> Persist["Local JSON (user_settings + backups)"]
+```
 
-- 类型定义：`types.ts`（`AppSettings`）
-- 存储迁移与清洗：`services/storage.ts`
-  - `migrateToLatest`
-  - `sanitizeForSave`
-  - `normalize*` 系列
-- Store 落盘载荷：`store.ts`
-  - `buildSettingsPayload`
-  - `initializeStore`
-  - `applyImportedSettings`
-- 设置页 UI：`components/Settings.tsx`
-- 多语言文案：`i18n.ts`
+## 🗂️ 关键模块
 
-### 2. 新增卡片类型时
+| 文件 | 作用 |
+| --- | --- |
+| `App.tsx` | 应用壳层：初始化、自动保存、刷新调度、自动备份、窗口自适应、音效绑定 |
+| `store.ts` | 全局状态与业务动作中心（卡片/分组/布局/回收站/设置/队列/告警） |
+| `services/execution.ts` | 脚本执行、输出校验、mapping 归一化、脚本预校验 |
+| `services/storage.ts` | 持久化、schema 迁移、导入导出、备份轮转、路径解析 |
+| `services/alerts.ts` | 状态变更/阈值告警计算与 cooldown |
+| `services/diagnostics.ts` | 执行历史 ring buffer、统计聚合、错误摘要 |
+| `components/CreationWizard.tsx` | 建卡/编辑向导主流程 |
+| `components/Dashboard.tsx` | 卡片渲染、编辑模式、布局交互、Section Marker |
+| `components/GroupManagementCenter.tsx` | 分组管理与批处理 |
+| `src-tauri/src/commands.rs` | `run_python_script` / `validate_python_script` |
 
-至少更新：
+## 💾 配置、存储与备份
 
-- `types.ts`（`CardType` 与 payload 类型）
-- `services/execution.ts`（normalize + mapping）
-- `components/CreationWizard.tsx`（向导步骤、校验、默认 mapping）
-- `components/Dashboard.tsx` + 对应 `components/cards/*`
-- `services/storage.ts`（迁移默认 mapping）
-- `services/*.test.ts` 增补单测
+### 路径机制
 
-### 3. 布局相关改动时
+| 项目 | 说明 |
+| --- | --- |
+| 主配置文件 | 默认在 Tauri `AppLocalData/data/user_settings.json` |
+| 自定义数据目录 | 通过 `storage_config.json` 指针记录 |
+| 备份目录 | 默认 `data/backups/` |
+| schema 版本 | 当前 `schema_version = 6`（自动迁移） |
 
-- 优先复用 `layout.ts` 的 scope 工具函数
-- 注意“全局布局”与“分组布局”双轨一致性（`__all__` / `group:*`）
-- 变更网格列数时需考虑 `reflowCardsForColumns` 与 section marker 边界归一化
+### 核心配置项（含范围）
 
-### 4. 国际化规范
+| Key | 默认值 | 范围/枚举 |
+| --- | --- | --- |
+| `dashboard_columns` | `4` | `2 ~ 6` |
+| `refresh_concurrency_limit` | `4` | `1 ~ 16` |
+| `execution_history_limit` | `120` | `10 ~ 500` |
+| `backup_config.retention_count` | `5` | `3 ~ 20` |
+| `backup_config.schedule.mode` | `interval` | `interval / daily / weekly` |
+| `backup_config.schedule.every_minutes` | `60` | `5 / 30 / 60 / 180 / 720` |
+| `interaction_sound.volume` | `65` | `0 ~ 100` |
+| `card.refresh_config.interval_sec` | `300` | 正整数（秒） |
+| `card.refresh_config.timeout_ms` | `10000` | 实际执行时 clamp 到 `1000 ~ 120000` |
+| `alert_config.cooldown_sec` | `300` | `>= 0` |
 
-- 文案统一走 `i18n.ts` 的 key
-- 新增文案需同时补齐 `zh-CN` 与 `en-US`
+<details>
+<summary><strong>配置结构示例（简化）</strong></summary>
 
-## 目录速览
+```json
+{
+  "schema_version": 6,
+  "theme": "light | dark",
+  "language": "zh-CN | en-US",
+  "dashboard_columns": 4,
+  "adaptive_window_enabled": true,
+  "refresh_concurrency_limit": 4,
+  "execution_history_limit": 120,
+  "backup_config": {
+    "directory": "optional",
+    "retention_count": 5,
+    "auto_backup_enabled": true,
+    "schedule": { "mode": "interval", "every_minutes": 60 }
+  },
+  "groups": [{ "id": "G1", "name": "Default", "order": 0 }],
+  "cards": [],
+  "section_markers": []
+}
+```
 
-- `components/`：页面与 UI 组件
-- `components/cards/`：四类卡片渲染
-- `services/`：执行、存储、告警、诊断、工具函数与单测
-- `src-tauri/`：Rust 命令层与 Tauri 配置
-- `docs/`：脚本协议、PRD 等文档
-- `test/`：手动验证用 Python 脚本
-- `store.ts`：全局业务状态中枢
-- `types.ts`：核心领域类型定义
+</details>
 
-## 注意事项
+## 🧵 Python 解释器选择顺序
 
-- 浏览器模式下不能真实执行本地 Python，请用 `npm run tauri:dev` 做联调。
-- Tauri 打包依赖平台原生库，Linux 需额外安装 WebKit/GTK 依赖（见 CI workflow）。
+1. 卡片级 `python_path`（若设置）
+2. 全局默认 Python（Settings）
+3. 平台兜底：
+   - Windows：`python` -> `py -3`
+   - macOS/Linux：`python3` -> `python`
+
+## 🧰 脚本参数说明
+
+向导里参数为“字符串输入”，会做 shell-like 拆分（支持引号与转义）：
+
+- `--name "hello world"`
+- `--path '/a b/c.py'`
+- `--msg a\ b`
+
+若存在未闭合引号，将提示 `UNCLOSED_QUOTE`。
+
+## ✅ 测试与质量保障
+
+- 单测框架：Vitest
+- 当前测试文件：`services/*.test.ts` 共 **14** 个
+- 覆盖方向：执行层、存储迁移、布局碰撞、分组批量操作、告警持久化、交互音效等
+
+手工测试脚本：
+
+- 目录：[`test/`](test/)
+- 文档：[`test/README.md`](test/README.md)
+- 包含成功样例、映射样例、错误样例（无效 JSON、类型不匹配、超时、stderr 非零退出）
+
+CI 工作流：
+
+- 文件：[`.github/workflows/desktop-ci.yml`](.github/workflows/desktop-ci.yml)
+- 内容：前端检查 + `macOS / Windows / Linux` 三平台 Tauri 构建（含 artifact 上传）
+
+## 📁 目录速览
+
+```text
+.
+├── components/              # 页面与 UI 组件
+│   ├── cards/               # scalar / series / status / gauge
+│   └── ...
+├── services/                # execution / storage / alerts / diagnostics / tests
+├── src-tauri/               # Rust 命令层与 Tauri 配置
+├── docs/                    # 脚本协议、PRD 等
+├── test/                    # 手工验证脚本（Python）
+├── App.tsx                  # 应用壳层
+├── store.ts                 # 全局状态与动作
+└── types.ts                 # 领域类型定义
+```
+
+## 🧭 二次开发约定（重要）
+
+### 新增设置字段时
+
+- 更新 `types.ts` 的 `AppSettings`
+- 更新 `services/storage.ts` 的迁移与 normalize
+- 更新 `store.ts` 的 `buildSettingsPayload / initializeStore / applyImportedSettings`
+- 更新 `components/Settings.tsx`
+- 更新 `i18n.ts`（`zh-CN` 与 `en-US`）
+
+### 新增卡片类型时
+
+- 更新 `types.ts` 类型定义
+- 更新 `services/execution.ts` 的 normalize + mapping
+- 更新 `components/CreationWizard.tsx`（步骤/校验/默认映射）
+- 更新 `components/Dashboard.tsx` + `components/cards/*`
+- 更新 `services/storage.ts` 迁移逻辑
+- 补充 `services/*.test.ts`
+
+### 布局改动时
+
+- 优先复用 `layout.ts`（`__all__` 与 `group:*` 双作用域）
+- 注意列数变化后的重排与分段线边界归一化
+
+## ⚠️ 常见问题（FAQ）
+
+1. **为什么 `npm run dev` 下脚本不能执行？**  
+   浏览器模式无 Tauri runtime，无法调用本地命令。请使用 `npm run tauri:dev`。
+
+2. **脚本明明能跑，卡片却报 JSON 错误？**  
+   确保 `stdout` 只有 JSON 数据；日志请写到 `stderr` 或文件。
+
+3. **`status` 状态值不在枚举内怎么办？**  
+   会归一化为 `unknown`。建议输出 `ok/warning/error/unknown`。
+
+4. **执行失败后卡片会不会全空？**  
+   不会。若有 `last_success_payload`，失败时仍可展示缓存数据并标记 error。
+
+5. **脚本执行是否沙箱隔离？**  
+   默认按当前用户权限执行本地脚本。请自行控制脚本来源与权限边界。
+
+<a id="english-snapshot"></a>
+## 🇺🇸 English Snapshot
+
+**MyMetrics** is a local-first desktop dashboard built with **Tauri + React + TypeScript**.  
+You provide local Python scripts as data sources; MyMetrics handles visualization, scheduling, alerting, diagnostics, and persistence.
+
+- 4 card types: `scalar`, `series`, `status`, `gauge`
+- 5-step creation wizard with script validation and live preview
+- Local JSON storage with schema migration (`schema_version = 6`)
+- Backup rotation, diagnostics, notification alerts, and group-level operations
+
+For full details, read:
+
+- [Data contract](docs/脚本数据协议与示例.md)
+- [Manual script tests](test/README.md)
+- [CI workflow](.github/workflows/desktop-ci.yml)
+
+## 📄 License
+
+MIT. See [LICENSE](LICENSE).
