@@ -21,12 +21,21 @@
 <p align="center">
   <a href="#quick-start">快速开始</a> ·
   <a href="#features">功能全景</a> ·
+  <a href="#screenshots">应用截图</a> ·
   <a href="#data-contract">脚本协议</a> ·
   <a href="#architecture">架构图</a> ·
   <a href="#english-snapshot">English</a>
 </p>
 
 ---
+
+<p align="center">
+  <img src="docs/images/hero-dashboard.png" alt="MyMetrics Dashboard Hero" width="100%" />
+</p>
+
+<p align="center">
+  <em>Dashboard 全景：多卡片、分组导航、分段线与编辑能力</em>
+</p>
 
 ## ✨ 项目亮点
 
@@ -46,6 +55,27 @@
 | Diagnostics | 每卡历史 ring buffer、全局执行记录、成功率、平均耗时、P50/P90、失败热点 |
 | Recycle Bin | 软删除回收、还原、永久删除、清空回收站 |
 | Settings | 主题/语言、数据目录、导入导出、备份策略、默认 Python、并发限流、历史容量、交互音效、通知权限 |
+
+<a id="screenshots"></a>
+## 🖼️ 应用截图
+
+### 向导与分组管理
+
+| Creation Wizard（测试与预览） | Group Management Center（分组批处理） |
+| --- | --- |
+| ![Wizard Preview](docs/images/wizard-preview.png) | ![Group Management](docs/images/group-management.png) |
+
+### 诊断、设置与回收站
+
+| Diagnostics（执行历史与失败分析） | Settings（运行时与备份配置） |
+| --- | --- |
+| ![Diagnostics](docs/images/diagnostics.png) | ![Settings Runtime Backup](docs/images/settings-runtime-backup.png) |
+
+![Recycle Bin](docs/images/recycle-bin.png)
+
+<p align="center">
+  <em>Recycle Bin：软删除恢复与永久删除管理</em>
+</p>
 
 ## 🧩 卡片类型
 
