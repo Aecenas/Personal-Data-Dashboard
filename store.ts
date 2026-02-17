@@ -454,9 +454,6 @@ const sortSectionMarkers = (markers: SectionMarker[], groups: GroupEntity[] = []
   );
 };
 
-const rangesOverlap = (startA: number, lengthA: number, startB: number, lengthB: number) =>
-  startA < startB + lengthB && startA + lengthA > startB;
-
 const isWithinGrid = (x: number, y: number, w: number, h: number, columns: number) =>
   x >= 0 && y >= 0 && x + w <= columns;
 
@@ -495,53 +492,6 @@ const checkCollision = (
   scopeGroup?: string,
 ) => {
   return getCollidingCards(cards, x, y, w, h, excludeId, scopeGroup).length > 0;
-};
-
-const getDirectionalBlockers = (
-  cards: Card[],
-  movingCard: Card,
-  scopeGroup: string | undefined,
-  dx: number,
-  dy: number,
-) => {
-  const movingPosition = getCardLayoutPosition(movingCard, scopeGroup);
-  const movingSize = getCardSize(movingCard.ui_config.size);
-
-  const blockers = cards
-    .filter((card) => {
-      if (card.status.is_deleted) return false;
-      if (card.id === movingCard.id) return false;
-      if (scopeGroup && card.group !== scopeGroup) return false;
-      return true;
-    })
-    .map((card) => {
-      const position = getCardLayoutPosition(card, scopeGroup);
-      const size = getCardSize(card.ui_config.size);
-      return { card, position, size };
-    })
-    .filter(({ position, size }) => {
-      if (dx !== 0) {
-        const verticalOverlap = rangesOverlap(movingPosition.y, movingSize.h, position.y, size.h);
-        if (!verticalOverlap) return false;
-        return dx > 0 ? position.x >= movingPosition.x + movingSize.w : position.x + size.w <= movingPosition.x;
-      }
-
-      const horizontalOverlap = rangesOverlap(movingPosition.x, movingSize.w, position.x, size.w);
-      if (!horizontalOverlap) return false;
-      return dy > 0 ? position.y >= movingPosition.y + movingSize.h : position.y + size.h <= movingPosition.y;
-    })
-    .map(({ card, position, size }) => {
-      let distance = 0;
-      if (dx > 0) distance = position.x - (movingPosition.x + movingSize.w);
-      if (dx < 0) distance = movingPosition.x - (position.x + size.w);
-      if (dy > 0) distance = position.y - (movingPosition.y + movingSize.h);
-      if (dy < 0) distance = movingPosition.y - (position.y + size.h);
-      return { card, distance };
-    })
-    .sort((a, b) => a.distance - b.distance)
-    .map((item) => item.card);
-
-  return blockers;
 };
 
 const findNextY = (cards: Card[], scopeGroup?: string) => {
@@ -2255,11 +2205,6 @@ export const useStore = create<AppState>((set, get) => ({
       if (!isSingleStepMove || blockingCards.length !== 1) return { cards: state.cards };
 
       const blocker = blockingCards[0];
-      const blockersInDirection = getDirectionalBlockers(state.cards, card, scopeGroup, dx, dy);
-      if (blockersInDirection.length !== 1 || blockersInDirection[0].id !== blocker.id) {
-        return { cards: state.cards };
-      }
-
       const blockerPosition = getCardLayoutPosition(blocker, scopeGroup);
       const blockerSize = getCardSize(blocker.ui_config.size);
       const sameSize = blockerSize.w === w && blockerSize.h === h;
