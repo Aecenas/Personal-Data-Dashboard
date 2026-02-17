@@ -542,6 +542,75 @@ const findPlacement = (
   return { x: 0, y: startY };
 };
 
+const isPlacementValid = (
+  cards: Card[],
+  placement: { x: number; y: number },
+  size: Card['ui_config']['size'],
+  columns: number,
+  excludeId?: string,
+  scopeGroup?: string,
+) => {
+  const { w, h } = getCardSize(size);
+  if (!isWithinGrid(placement.x, placement.y, w, h, columns)) return false;
+  return !checkCollision(cards, placement.x, placement.y, w, h, excludeId, scopeGroup);
+};
+
+const findRelayoutPlacement = (
+  cards: Card[],
+  targetCard: Card,
+  columns: number,
+  scopeGroup?: string,
+) => {
+  const normalizedColumns = clampDashboardColumns(columns);
+  const currentPosition = getCardLayoutPosition(targetCard, scopeGroup);
+  const preferredPlacement = findPlacement(
+    cards,
+    targetCard.ui_config.size,
+    normalizedColumns,
+    Math.max(0, currentPosition.y),
+    targetCard.id,
+    scopeGroup,
+  );
+  if (isPlacementValid(cards, preferredPlacement, targetCard.ui_config.size, normalizedColumns, targetCard.id, scopeGroup)) {
+    return preferredPlacement;
+  }
+
+  const fallbackStartY = findNextY(
+    cards.filter((card) => !card.status.is_deleted && card.id !== targetCard.id),
+    scopeGroup,
+  );
+  const fallbackPlacement = findPlacement(
+    cards,
+    targetCard.ui_config.size,
+    normalizedColumns,
+    fallbackStartY,
+    targetCard.id,
+    scopeGroup,
+  );
+  if (isPlacementValid(cards, fallbackPlacement, targetCard.ui_config.size, normalizedColumns, targetCard.id, scopeGroup)) {
+    return fallbackPlacement;
+  }
+
+  return findPlacement(cards, targetCard.ui_config.size, normalizedColumns, 0, targetCard.id, scopeGroup);
+};
+
+const relayoutCardIfNeeded = (
+  cards: Card[],
+  targetCard: Card,
+  columns: number,
+  scopeGroup?: string,
+) => {
+  if (targetCard.status.is_deleted) return targetCard;
+
+  const currentPosition = getCardLayoutPosition(targetCard, scopeGroup);
+  if (isPlacementValid(cards, currentPosition, targetCard.ui_config.size, columns, targetCard.id, scopeGroup)) {
+    return targetCard;
+  }
+
+  const nextPlacement = findRelayoutPlacement(cards, targetCard, columns, scopeGroup);
+  return setCardLayoutPosition(targetCard, scopeGroup, nextPlacement);
+};
+
 interface LayoutRect {
   x: number;
   y: number;
@@ -1953,8 +2022,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateCard: (id, updates) =>
     set((state) => {
+      let targetCardUpdated = false;
+      let sizeChanged = false;
+
       const updatedCards = state.cards.map((card) => {
         if (card.id !== id) return card;
+        targetCardUpdated = true;
 
         const nextGroup = updates.group ? normalizeGroupName(updates.group) : card.group;
         const sanitizedUpdates: Partial<Card> = {
@@ -1966,13 +2039,32 @@ export const useStore = create<AppState>((set, get) => ({
         }
 
         const merged = ensureCardLayoutScopes(mergeCard(card, sanitizedUpdates));
+        sizeChanged = merged.ui_config.size !== card.ui_config.size;
         if (!sanitizedUpdates.group || sanitizedUpdates.group === card.group) return merged;
 
         const previousGroupPosition = getCardLayoutPosition(card, card.group);
         const withNewPosition = setCardLayoutPosition(merged, sanitizedUpdates.group, previousGroupPosition);
         return renameCardLayoutScope(withNewPosition, card.group, sanitizedUpdates.group);
       });
-      const cards = recalcSortOrder(updatedCards);
+
+      if (!targetCardUpdated) {
+        return {};
+      }
+
+      let cards = updatedCards;
+
+      if (sizeChanged && !state.isEditMode) {
+        const targetCard = cards.find((card) => card.id === id);
+        if (targetCard && !targetCard.status.is_deleted) {
+          let relocated = relayoutCardIfNeeded(cards, targetCard, state.dashboardColumns, targetCard.group);
+          cards = cards.map((card) => (card.id === id ? relocated : card));
+
+          relocated = relayoutCardIfNeeded(cards, relocated, state.dashboardColumns);
+          cards = cards.map((card) => (card.id === id ? relocated : card));
+        }
+      }
+
+      cards = recalcSortOrder(cards);
       const groups = normalizeGroupEntities(state.groups, cards, state.sectionMarkers, state.activeGroup);
       const normalizedCards = normalizeCardBusinessIds(cards, groups);
       const activeGroup = normalizeActiveGroup(state.activeGroup, groups);
