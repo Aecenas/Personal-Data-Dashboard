@@ -88,6 +88,8 @@ interface ScriptValidationState {
   resolvedPython?: string;
 }
 
+type ValidationAnchor = 'title' | null;
+
 const defaultForm: WizardForm = {
   title: '',
   group: 'Default',
@@ -252,6 +254,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
   const [testResult, setTestResult] = useState<ExecutionResult | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [validationMessage, setValidationMessage] = useState<string>('');
+  const [validationAnchor, setValidationAnchor] = useState<ValidationAnchor>(null);
   const [scriptValidation, setScriptValidation] = useState<ScriptValidationState>({ status: 'idle' });
   const [isCreateGroupOpen, setCreateGroupOpen] = useState(false);
   const [createGroupName, setCreateGroupName] = useState('');
@@ -276,6 +279,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     scriptValidationRequestRef.current += 1;
     setScriptValidation({ status: 'idle' });
     setValidationMessage('');
+    setValidationAnchor(null);
 
     if (editingCard) {
       setForm(createFormFromCard(editingCard));
@@ -435,6 +439,16 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const setValidationError = (message: string, anchor: ValidationAnchor = null) => {
+    setValidationMessage(message);
+    setValidationAnchor(anchor);
+  };
+
+  const clearValidationError = () => {
+    setValidationMessage('');
+    setValidationAnchor(null);
+  };
+
   const resolveGroupErrorMessage = (error: string) => tr(groupMutationErrorKeyMap[error] ?? 'groups.error.generic');
 
   const openCreateGroupDialog = () => {
@@ -470,66 +484,66 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
   const validateStep = (targetStep: number): boolean => {
     if (targetStep === 1) {
       if (!form.title.trim()) {
-        setValidationMessage(tr('wizard.validation.titleRequired'));
+        setValidationError(tr('wizard.validation.titleRequired'), 'title');
         return false;
       }
       if (!form.group.trim()) {
-        setValidationMessage(tr('wizard.validation.groupRequired'));
+        setValidationError(tr('wizard.validation.groupRequired'));
         return false;
       }
     }
 
     if (targetStep === 2) {
       if (!form.scriptPath.trim()) {
-        setValidationMessage(tr('wizard.validation.scriptPathRequired'));
+        setValidationError(tr('wizard.validation.scriptPathRequired'));
         return false;
       }
       if (!form.scriptPath.trim().endsWith('.py')) {
-        setValidationMessage(tr('wizard.validation.scriptExt'));
+        setValidationError(tr('wizard.validation.scriptExt'));
         return false;
       }
       if (form.intervalSec < 0) {
-        setValidationMessage(tr('wizard.validation.intervalMin'));
+        setValidationError(tr('wizard.validation.intervalMin'));
         return false;
       }
       if (form.timeoutMs < 1000) {
-        setValidationMessage(tr('wizard.validation.timeoutMin'));
+        setValidationError(tr('wizard.validation.timeoutMin'));
         return false;
       }
       if (parsedArgs.error) {
-        setValidationMessage(parsedArgs.error);
+        setValidationError(parsedArgs.error);
         return false;
       }
       if (scriptValidation.status !== 'valid') {
-        setValidationMessage(getScriptValidationBlockMessage());
+        setValidationError(getScriptValidationBlockMessage());
         return false;
       }
     }
 
     if (targetStep === 3) {
       if (form.type === 'scalar' && !form.scalarValueKey.trim()) {
-        setValidationMessage(tr('wizard.validation.scalarValue'));
+        setValidationError(tr('wizard.validation.scalarValue'));
         return false;
       }
       if (form.type === 'series') {
         if (!form.seriesXAxisKey.trim() || !form.seriesKey.trim()) {
-          setValidationMessage(tr('wizard.validation.seriesAxes'));
+          setValidationError(tr('wizard.validation.seriesAxes'));
           return false;
         }
         if (!form.seriesNameKey.trim() || !form.seriesValuesKey.trim()) {
-          setValidationMessage(tr('wizard.validation.seriesFields'));
+          setValidationError(tr('wizard.validation.seriesFields'));
           return false;
         }
       }
       if (form.type === 'status') {
         if (!form.statusLabelKey.trim() || !form.statusStateKey.trim()) {
-          setValidationMessage(tr('wizard.validation.statusFields'));
+          setValidationError(tr('wizard.validation.statusFields'));
           return false;
         }
       }
       if (form.type === 'gauge') {
         if (!form.gaugeMinKey.trim() || !form.gaugeMaxKey.trim() || !form.gaugeValueKey.trim()) {
-          setValidationMessage(tr('wizard.validation.gaugeFields'));
+          setValidationError(tr('wizard.validation.gaugeFields'));
           return false;
         }
       }
@@ -537,7 +551,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
 
     if (targetStep === 4) {
       if (form.alertCooldownSec < 0) {
-        setValidationMessage(tr('wizard.validation.alertCooldownMin'));
+        setValidationError(tr('wizard.validation.alertCooldownMin'));
         return false;
       }
 
@@ -547,18 +561,18 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       const lowerThreshold = parseOptionalThreshold(form.alertLowerThreshold);
 
       if (upperRaw && upperThreshold === undefined) {
-        setValidationMessage(tr('wizard.validation.alertUpperNumber'));
+        setValidationError(tr('wizard.validation.alertUpperNumber'));
         return false;
       }
 
       if (lowerRaw && lowerThreshold === undefined) {
-        setValidationMessage(tr('wizard.validation.alertLowerNumber'));
+        setValidationError(tr('wizard.validation.alertLowerNumber'));
         return false;
       }
 
       if ((form.type === 'scalar' || form.type === 'gauge') && form.alertEnabled) {
         if (!upperRaw && !lowerRaw) {
-          setValidationMessage(tr('wizard.validation.alertThresholdRequired'));
+          setValidationError(tr('wizard.validation.alertThresholdRequired'));
           return false;
         }
       }
@@ -568,12 +582,12 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         lowerThreshold !== undefined &&
         lowerThreshold > upperThreshold
       ) {
-        setValidationMessage(tr('wizard.validation.alertThresholdRange'));
+        setValidationError(tr('wizard.validation.alertThresholdRange'));
         return false;
       }
     }
 
-    setValidationMessage('');
+    clearValidationError();
     return true;
   };
 
@@ -768,7 +782,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
   };
 
   const goBack = () => {
-    setValidationMessage('');
+    clearValidationError();
     setStep((prev) => Math.max(1, prev - 1));
   };
 
@@ -781,8 +795,22 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
           placeholder={tr('wizard.cardTitlePlaceholder')}
           value={form.title}
-          onChange={(event) => updateForm('title', event.target.value)}
+          onChange={(event) => {
+            const nextTitle = event.target.value;
+            updateForm('title', nextTitle);
+            if (validationAnchor === 'title' && nextTitle.trim()) {
+              clearValidationError();
+            }
+          }}
         />
+        {validationAnchor === 'title' && validationMessage && (
+          <div
+            className="rounded-md border border-red-500/40 bg-red-500/15 px-3 py-2 text-sm font-semibold text-red-600"
+            role="alert"
+          >
+            {validationMessage}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -1577,7 +1605,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
                     <button
                       type="button"
                       onClick={() => {
-                        setValidationMessage('');
+                        clearValidationError();
                         setStep(currentStep);
                       }}
                       className={`flex items-center gap-2 ${
@@ -1609,7 +1637,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           {step === 4 && renderStepFour()}
           {step === 5 && renderStepFive()}
 
-          {validationMessage && (
+          {validationMessage && !(step === 1 && validationAnchor === 'title') && (
             <div className="mt-4 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
               {validationMessage}
             </div>
