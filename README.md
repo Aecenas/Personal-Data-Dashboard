@@ -244,8 +244,9 @@ flowchart LR
 | `refresh_concurrency_limit` | `4` | `1 ~ 16` |
 | `execution_history_limit` | `120` | `10 ~ 500` |
 | `backup_config.retention_count` | `5` | `3 ~ 20` |
-| `backup_config.schedule.mode` | `interval` | `interval / daily / weekly` |
-| `backup_config.schedule.every_minutes` | `60` | `5 / 30 / 60 / 180 / 720` |
+| `backup_config.schedule.mode` | `daily` | `interval / daily / weekly` |
+| `backup_config.schedule.hour/minute` | `03:00` | `daily / weekly` 模式有效 |
+| `backup_config.schedule.every_minutes` | `60` | `interval` 模式下可选 `5 / 30 / 60 / 180 / 720` |
 | `interaction_sound.volume` | `65` | `0 ~ 100` |
 | `card.refresh_config.interval_sec` | `300` | 正整数（秒） |
 | `card.refresh_config.timeout_ms` | `10000` | 实际执行时 clamp 到 `1000 ~ 120000` |
@@ -267,7 +268,7 @@ flowchart LR
     "directory": "optional",
     "retention_count": 5,
     "auto_backup_enabled": true,
-    "schedule": { "mode": "interval", "every_minutes": 60 }
+    "schedule": { "mode": "daily", "hour": 3, "minute": 0 }
   },
   "groups": [{ "id": "G1", "name": "Default", "order": 0 }],
   "cards": [],
@@ -298,7 +299,7 @@ flowchart LR
 ## ✅ 测试与质量保障
 
 - 单测框架：Vitest
-- 当前测试文件：`services/*.test.ts` 共 **14** 个
+- 当前测试文件：`services/*.test.ts` 共 **15** 个
 - 覆盖方向：执行层、存储迁移、布局碰撞、分组批量操作、告警持久化、交互音效等
 
 手工测试脚本：
