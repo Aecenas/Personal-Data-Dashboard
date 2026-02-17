@@ -73,6 +73,38 @@ describe('interaction sound service', () => {
     expect(gainValues).toHaveLength(2);
     expect(gainValues[1]).toBeGreaterThan(gainValues[0]);
   });
+
+  it('queues the first event while audio context is resuming and replays after resume', async () => {
+    let currentState: 'suspended' | 'running' = 'suspended';
+    const resumeSpy = vi.fn(async () => {
+      currentState = 'running';
+    });
+    const context = {
+      get state() {
+        return currentState;
+      },
+      resume: resumeSpy,
+    } as unknown as AudioContext;
+    const scheduleSpy = vi.fn((_context: AudioContext, _recipe: unknown, _masterGain: number) => 120);
+
+    const service = createInteractionSoundService({
+      createAudioContext: () => context,
+      scheduleRecipe: scheduleSpy,
+    });
+
+    const played = service.play('action.success');
+    expect(played).toBeTypeOf('boolean');
+    if (!played) {
+      expect(scheduleSpy).toHaveBeenCalledTimes(0);
+    }
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(resumeSpy).toHaveBeenCalledTimes(1);
+    expect(scheduleSpy).toHaveBeenCalledTimes(1);
+    expect(scheduleSpy.mock.calls[0]?.[1]).toBe(interactionSoundRecipes['action.success']);
+  });
 });
 
 describe('interaction sound helpers', () => {

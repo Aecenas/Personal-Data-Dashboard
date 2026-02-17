@@ -281,14 +281,63 @@ export const createInteractionSoundService = (
   let context: AudioContext | null = null;
   let warnedUnsupported = false;
   let activeVoiceExpiresAt: number[] = [];
+  let resumePromise: Promise<void> | null = null;
+  let queuedEventForResume: InteractionSoundEvent | null = null;
   const lastPlayedAt = new Map<InteractionSoundEvent, number>();
+
+  const purgeExpiredVoices = (now: number) => {
+    activeVoiceExpiresAt = activeVoiceExpiresAt.filter((expiresAt) => expiresAt > now);
+  };
+
+  const playWithReadyContext = (event: InteractionSoundEvent, now: number): boolean => {
+    if (!context || context.state !== 'running') return false;
+
+    const recipe = interactionSoundRecipes[event];
+    purgeExpiredVoices(now);
+    if (activeVoiceExpiresAt.length >= MAX_CONCURRENT_VOICES) return false;
+
+    const lastTime = lastPlayedAt.get(event) ?? -Infinity;
+    if (now - lastTime < recipe.throttleMs) return false;
+
+    const masterGain = volumeToMasterGain(volume);
+    try {
+      const durationMs = deps.scheduleRecipe(context, recipe, masterGain);
+      lastPlayedAt.set(event, now);
+      activeVoiceExpiresAt.push(now + Math.max(80, durationMs + 40));
+      return true;
+    } catch (error) {
+      deps.warn('[interaction-sound] Failed to play sound event:', event, error);
+      return false;
+    }
+  };
+
+  const queuePlaybackAfterResume = (event: InteractionSoundEvent) => {
+    if (!context || context.state === 'running') return;
+    queuedEventForResume = event;
+    if (resumePromise) return;
+
+    resumePromise = context
+      .resume()
+      .then(() => {
+        const queued = queuedEventForResume;
+        queuedEventForResume = null;
+        if (!queued || !enabled) return;
+        playWithReadyContext(queued, deps.now());
+      })
+      .catch((error) => {
+        deps.warn('[interaction-sound] Failed to resume audio context', error);
+      })
+      .finally(() => {
+        resumePromise = null;
+      });
+  };
 
   const initializeIfNeeded = (): boolean => {
     if (context) {
       if (context.state === 'closed') {
         context = null;
       } else if (context.state !== 'running') {
-        void context.resume().catch(() => undefined);
+        queuePlaybackAfterResume('ui.tap');
         return false;
       } else {
         return true;
@@ -306,7 +355,7 @@ export const createInteractionSoundService = (
 
     context = created;
     if (context.state !== 'running') {
-      void context.resume().catch(() => undefined);
+      queuePlaybackAfterResume('ui.tap');
       return false;
     }
     return true;
@@ -314,39 +363,35 @@ export const createInteractionSoundService = (
 
   const setEnabled = (nextEnabled: boolean) => {
     enabled = Boolean(nextEnabled);
+    if (!enabled) {
+      queuedEventForResume = null;
+    }
   };
 
   const setVolume = (nextVolume: number) => {
     volume = clampInteractionSoundVolume(nextVolume);
   };
 
-  const purgeExpiredVoices = (now: number) => {
-    activeVoiceExpiresAt = activeVoiceExpiresAt.filter((expiresAt) => expiresAt > now);
-  };
-
   const play = (event: InteractionSoundEvent): boolean => {
     if (!enabled) return false;
 
-    const recipe = interactionSoundRecipes[event];
     const now = deps.now();
-    purgeExpiredVoices(now);
-    if (activeVoiceExpiresAt.length >= MAX_CONCURRENT_VOICES) return false;
-
-    if (!initializeIfNeeded() || !context) return false;
-
-    const lastTime = lastPlayedAt.get(event) ?? -Infinity;
-    if (now - lastTime < recipe.throttleMs) return false;
-
-    const masterGain = volumeToMasterGain(volume);
-    try {
-      const durationMs = deps.scheduleRecipe(context, recipe, masterGain);
-      lastPlayedAt.set(event, now);
-      activeVoiceExpiresAt.push(now + Math.max(80, durationMs + 40));
-      return true;
-    } catch (error) {
-      deps.warn('[interaction-sound] Failed to play sound event:', event, error);
+    if (context && context.state !== 'running') {
+      queuePlaybackAfterResume(event);
       return false;
     }
+    if (!initializeIfNeeded()) {
+      if (context && context.state === 'running') {
+        queuedEventForResume = null;
+        return playWithReadyContext(event, now);
+      }
+      if (context) {
+        queuePlaybackAfterResume(event);
+      }
+      return false;
+    }
+
+    return playWithReadyContext(event, now);
   };
 
   return {
