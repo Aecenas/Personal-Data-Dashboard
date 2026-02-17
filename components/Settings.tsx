@@ -45,6 +45,13 @@ interface SettingsSectionConfig {
   descriptionKey: string;
 }
 
+type ActionFeedbackTone = 'success' | 'error';
+
+interface ActionFeedback {
+  tone: ActionFeedbackTone;
+  message: string;
+}
+
 const SETTINGS_SECTIONS: SettingsSectionConfig[] = [
   {
     id: 'general',
@@ -113,10 +120,12 @@ export const Settings = () => {
     String(executionHistoryLimit),
   );
   const [backupPathDisplay, setBackupPathDisplay] = useState('');
-  const [storageHint, setStorageHint] = useState('');
+  const [configFeedback, setConfigFeedback] = useState<ActionFeedback | null>(null);
+  const [backupFeedback, setBackupFeedback] = useState<ActionFeedback | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isUpdatingBackupFolder, setIsUpdatingBackupFolder] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus>('unsupported');
   const [isUpdatingNotificationPermission, setIsUpdatingNotificationPermission] = useState(false);
   const [isSendingTestNotification, setIsSendingTestNotification] = useState(false);
@@ -146,6 +155,11 @@ export const Settings = () => {
       active = false;
     };
   }, [backupDirectory, dataPath]);
+
+  useEffect(() => {
+    setConfigFeedback(null);
+    setBackupFeedback(null);
+  }, [activeSection]);
 
   const refreshNotificationPermission = async () => {
     const status = await notificationService.getPermissionStatus();
@@ -253,15 +267,55 @@ export const Settings = () => {
 
       const selectedPath = Array.isArray(selected) ? selected[0] : selected;
       if (selectedPath) {
-        setBackupDirectory(selectedPath);
+        setIsUpdatingBackupFolder(true);
+        setBackupFeedback(null);
+        try {
+          const result = await storageService.moveBackupsToDirectory({
+            fromDirectory: backupDirectory,
+            toDirectory: selectedPath,
+          });
+          setBackupDirectory(selectedPath);
+          setBackupFeedback({
+            tone: 'success',
+            message:
+              result.movedCount > 0
+                ? tr('settings.backupFolderChangedWithMove', { path: result.targetPath, count: result.movedCount })
+                : tr('settings.backupFolderChanged', { path: result.targetPath }),
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : tr('settings.importErrorUnknown');
+          setBackupFeedback({ tone: 'error', message });
+        } finally {
+          setIsUpdatingBackupFolder(false);
+        }
       }
     } catch (error) {
       console.error('Failed to open backup folder dialog', error);
     }
   };
 
-  const handleResetBackupFolder = () => {
-    setBackupDirectory(undefined);
+  const handleResetBackupFolder = async () => {
+    setIsUpdatingBackupFolder(true);
+    setBackupFeedback(null);
+    try {
+      const result = await storageService.moveBackupsToDirectory({
+        fromDirectory: backupDirectory,
+        toDirectory: undefined,
+      });
+      setBackupDirectory(undefined);
+      setBackupFeedback({
+        tone: 'success',
+        message:
+          result.movedCount > 0
+            ? tr('settings.backupFolderChangedWithMove', { path: result.targetPath, count: result.movedCount })
+            : tr('settings.backupFolderChanged', { path: result.targetPath }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : tr('settings.importErrorUnknown');
+      setBackupFeedback({ tone: 'error', message });
+    } finally {
+      setIsUpdatingBackupFolder(false);
+    }
   };
 
   const createExportFileName = () => {
@@ -277,7 +331,7 @@ export const Settings = () => {
 
   const handleExportConfig = async () => {
     setIsExporting(true);
-    setStorageHint('');
+    setConfigFeedback(null);
     try {
       const targetPath = await saveDialog({
         title: tr('settings.exportDialogTitle'),
@@ -287,10 +341,10 @@ export const Settings = () => {
       if (!targetPath) return;
 
       await storageService.exportToFile(targetPath, buildSettingsPayload(useStore.getState()));
-      setStorageHint(tr('settings.exportSuccess', { path: targetPath }));
+      setConfigFeedback({ tone: 'success', message: tr('settings.exportSuccess', { path: targetPath }) });
     } catch (error) {
       const message = error instanceof Error ? error.message : tr('settings.importErrorUnknown');
-      setStorageHint(message);
+      setConfigFeedback({ tone: 'error', message });
     } finally {
       setIsExporting(false);
     }
@@ -298,7 +352,7 @@ export const Settings = () => {
 
   const handleImportConfig = async () => {
     setIsImporting(true);
-    setStorageHint('');
+    setConfigFeedback(null);
     try {
       const selected = await open({
         directory: false,
@@ -313,15 +367,16 @@ export const Settings = () => {
       await applyImportedSettings(result.settings);
 
       if (result.migratedFromSchemaVersion !== undefined) {
-        setStorageHint(
-          tr('settings.importSuccessMigrated', { schema: result.migratedFromSchemaVersion }),
-        );
+        setConfigFeedback({
+          tone: 'success',
+          message: tr('settings.importSuccessMigrated', { schema: result.migratedFromSchemaVersion }),
+        });
       } else {
-        setStorageHint(tr('settings.importSuccess'));
+        setConfigFeedback({ tone: 'success', message: tr('settings.importSuccess') });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : tr('settings.importErrorUnknown');
-      setStorageHint(message);
+      setConfigFeedback({ tone: 'error', message });
     } finally {
       setIsImporting(false);
     }
@@ -329,16 +384,16 @@ export const Settings = () => {
 
   const handleCreateBackupNow = async () => {
     setIsBackingUp(true);
-    setStorageHint('');
+    setBackupFeedback(null);
     try {
       const outputPath = await storageService.createBackup(buildSettingsPayload(useStore.getState()), {
         directory: backupDirectory,
         retentionCount: backupRetentionCount,
       });
-      setStorageHint(tr('settings.backupNowSuccess', { path: outputPath }));
+      setBackupFeedback({ tone: 'success', message: tr('settings.backupNowSuccess', { path: outputPath }) });
     } catch (error) {
       const message = error instanceof Error ? error.message : tr('settings.importErrorUnknown');
-      setStorageHint(message);
+      setBackupFeedback({ tone: 'error', message });
     } finally {
       setIsBackingUp(false);
     }
@@ -347,6 +402,22 @@ export const Settings = () => {
   const activeSectionMeta =
     SETTINGS_SECTIONS.find((section) => section.id === activeSection) ?? SETTINGS_SECTIONS[0];
   const ActiveSectionIcon = activeSectionMeta.icon;
+  const renderActionFeedback = (feedback: ActionFeedback | null) => {
+    if (!feedback) return null;
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className={`rounded-md border px-3 py-2 text-sm break-all ${
+          feedback.tone === 'success'
+            ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+            : 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-300'
+        }`}
+      >
+        {feedback.message}
+      </div>
+    );
+  };
   const getIntervalPresetLabel = (minutes: BackupIntervalMinutes) => {
     if (minutes === 5) return tr('settings.intervalPreset.5m');
     if (minutes === 30) return tr('settings.intervalPreset.30m');
@@ -635,15 +706,18 @@ export const Settings = () => {
                     <p className="text-sm text-muted-foreground">{tr('settings.importExportConfigDesc')}</p>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={handleImportConfig} disabled={isImporting}>
-                      <Upload size={14} className="mr-2" />
-                      {isImporting ? tr('settings.importing') : tr('settings.importConfig')}
-                    </Button>
-                    <Button variant="outline" onClick={handleExportConfig} disabled={isExporting}>
-                      <Download size={14} className="mr-2" />
-                      {isExporting ? tr('settings.exporting') : tr('settings.exportConfig')}
-                    </Button>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Button onClick={handleImportConfig} disabled={isImporting}>
+                        <Upload size={14} className="mr-2" />
+                        {isImporting ? tr('settings.importing') : tr('settings.importConfig')}
+                      </Button>
+                      <Button variant="outline" onClick={handleExportConfig} disabled={isExporting}>
+                        <Download size={14} className="mr-2" />
+                        {isExporting ? tr('settings.exporting') : tr('settings.exportConfig')}
+                      </Button>
+                    </div>
+                    {renderActionFeedback(configFeedback)}
                   </div>
                 </div>
 
@@ -659,17 +733,24 @@ export const Settings = () => {
                         {isBackingUp ? tr('settings.backingUp') : tr('settings.backupNow')}
                       </Button>
                     </div>
+                    {renderActionFeedback(backupFeedback)}
 
                     <p className="font-medium">{tr('settings.backupFolder')}</p>
                     <p className="text-sm text-muted-foreground">{tr('settings.backupFolderDesc')}</p>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={handleChooseBackupFolder}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleChooseBackupFolder}
+                        disabled={isUpdatingBackupFolder}
+                      >
                         <Folder size={14} className="mr-2" /> {tr('settings.changeBackupFolder')}
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={handleResetBackupFolder}
+                        disabled={isUpdatingBackupFolder}
                         title={tr('settings.useDefaultBackupFolder')}
                       >
                         <RefreshCw size={14} />
@@ -866,7 +947,6 @@ export const Settings = () => {
                     </>
                   )}
 
-                  {storageHint && <p className="text-xs text-muted-foreground break-all">{storageHint}</p>}
                 </div>
               </div>
             </div>

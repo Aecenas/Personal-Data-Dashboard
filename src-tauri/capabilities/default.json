@@ -11,6 +11,9 @@
     "core:window:allow-set-size",
     "dialog:default",
     "fs:default",
+    "fs:allow-applocaldata-write-recursive",
+    "fs:allow-home-read-recursive",
+    "fs:allow-home-write-recursive",
     "notification:default"
   ]
 }

@@ -6,6 +6,7 @@ import {
   exists,
   readDir,
   remove,
+  copyFile,
 } from '@tauri-apps/plugin-fs';
 import { appLocalDataDir, join as joinNativePath } from '@tauri-apps/api/path';
 import {
@@ -869,7 +870,7 @@ export const storageService = {
 
     try {
       const location = await resolveDataPath();
-      const folderPath = location.isCustom ? location.path : dirname(location.path) || DEFAULT_SUBDIR;
+      const folderPath = dirname(location.path) || DEFAULT_SUBDIR;
       return await resolveAbsolutePath(folderPath, location.baseDir);
     } catch {
       return await resolveAbsolutePath(DEFAULT_SUBDIR, BaseDirectory.AppLocalData);
@@ -1031,6 +1032,69 @@ export const storageService = {
     }
 
     return backupFilePath;
+  },
+
+  async moveBackupsToDirectory({
+    fromDirectory,
+    toDirectory,
+  }: {
+    fromDirectory?: string;
+    toDirectory?: string;
+  }): Promise<{ movedCount: number; targetPath: string }> {
+    if (!isTauri()) throw new Error(tr('settings.importErrorUnavailable'));
+
+    const sourceDirectory = await resolveBackupDirectory({
+      directory: fromDirectory,
+      retentionCount: DEFAULT_BACKUP_RETENTION_COUNT,
+    });
+    const targetDirectory = await resolveBackupDirectory({
+      directory: toDirectory,
+      retentionCount: DEFAULT_BACKUP_RETENTION_COUNT,
+    });
+
+    const sourceKey = `${sourceDirectory.baseDir ?? 'absolute'}::${sourceDirectory.path}`;
+    const targetKey = `${targetDirectory.baseDir ?? 'absolute'}::${targetDirectory.path}`;
+    const targetPath = await resolveAbsolutePath(targetDirectory.path, targetDirectory.baseDir);
+    if (sourceKey === targetKey) {
+      return { movedCount: 0, targetPath };
+    }
+
+    const sourceExists = sourceDirectory.baseDir
+      ? await exists(sourceDirectory.path, { baseDir: sourceDirectory.baseDir })
+      : await exists(sourceDirectory.path);
+    if (!sourceExists) {
+      return { movedCount: 0, targetPath };
+    }
+
+    const mkdirOptions = targetDirectory.baseDir
+      ? { baseDir: targetDirectory.baseDir, recursive: true }
+      : { recursive: true };
+    await mkdir(targetDirectory.path, mkdirOptions);
+
+    const readDirOptions = sourceDirectory.baseDir ? { baseDir: sourceDirectory.baseDir } : undefined;
+    const entries = await readDir(sourceDirectory.path, readDirOptions);
+    const backupFileNames = entries
+      .filter((entry) => entry.isFile)
+      .map((entry) => entry.name)
+      .filter((name): name is string => typeof name === 'string' && backupFileNamePattern.test(name));
+
+    let movedCount = 0;
+    for (const fileName of backupFileNames) {
+      const sourceFilePath = joinPath(sourceDirectory.path, fileName);
+      const targetFilePath = joinPath(targetDirectory.path, fileName);
+      await copyFile(sourceFilePath, targetFilePath, {
+        fromPathBaseDir: sourceDirectory.baseDir,
+        toPathBaseDir: targetDirectory.baseDir,
+      });
+      if (sourceDirectory.baseDir) {
+        await remove(sourceFilePath, { baseDir: sourceDirectory.baseDir });
+      } else {
+        await remove(sourceFilePath);
+      }
+      movedCount += 1;
+    }
+
+    return { movedCount, targetPath };
   },
 };
 
