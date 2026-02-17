@@ -21,7 +21,15 @@ import {
 import { open } from '@tauri-apps/plugin-dialog';
 import { Button } from './ui/Button';
 import { useStore } from '../store';
-import { Card, CardType, MappingConfig, UIConfig } from '../types';
+import {
+  Card,
+  CardType,
+  MappingConfig,
+  UIConfig,
+  ScalarContentPosition,
+  TextSizePreset,
+  VerticalContentPosition,
+} from '../types';
 import { executionService, ExecutionResult } from '../services/execution';
 import { ArgParseError, formatScriptArgs, parseScriptArgs } from '../services/arg-parser';
 import { normalizeAlertConfig } from '../services/alerts';
@@ -38,6 +46,10 @@ interface WizardForm {
   type: CardType;
   size: UIConfig['size'];
   colorTheme: UIConfig['color_theme'];
+  scalarPosition: ScalarContentPosition;
+  scalarTextSize: TextSizePreset;
+  statusVerticalPosition: VerticalContentPosition;
+  statusTextSize: TextSizePreset;
   scriptPath: string;
   scriptArgsText: string;
   pythonPath: string;
@@ -81,6 +93,10 @@ const defaultForm: WizardForm = {
   type: 'scalar',
   size: '1x1',
   colorTheme: 'default',
+  scalarPosition: 'center',
+  scalarTextSize: 'medium',
+  statusVerticalPosition: 'center',
+  statusTextSize: 'medium',
   scriptPath: '',
   scriptArgsText: '',
   pythonPath: '',
@@ -121,6 +137,42 @@ const groupMutationErrorKeyMap: Record<string, string> = {
   last_group: 'groups.error.lastGroup',
 };
 
+const scalarPositionOptions: Array<{ value: ScalarContentPosition; labelKey: string }> = [
+  { value: 'top-left', labelKey: 'wizard.position.topLeft' },
+  { value: 'top-center', labelKey: 'wizard.position.topCenter' },
+  { value: 'top-right', labelKey: 'wizard.position.topRight' },
+  { value: 'middle-left', labelKey: 'wizard.position.middleLeft' },
+  { value: 'center', labelKey: 'wizard.position.center' },
+  { value: 'middle-right', labelKey: 'wizard.position.middleRight' },
+  { value: 'bottom-left', labelKey: 'wizard.position.bottomLeft' },
+  { value: 'bottom-center', labelKey: 'wizard.position.bottomCenter' },
+  { value: 'bottom-right', labelKey: 'wizard.position.bottomRight' },
+];
+
+const verticalPositionOptions: Array<{ value: VerticalContentPosition; labelKey: string }> = [
+  { value: 'top', labelKey: 'wizard.position.top' },
+  { value: 'center', labelKey: 'wizard.position.center' },
+  { value: 'bottom', labelKey: 'wizard.position.bottom' },
+];
+
+const textSizeOptions: Array<{ value: TextSizePreset; labelKey: string }> = [
+  { value: 'small', labelKey: 'wizard.textSizeSmall' },
+  { value: 'medium', labelKey: 'wizard.textSizeMedium' },
+  { value: 'large', labelKey: 'wizard.textSizeLarge' },
+];
+
+const scalarPositionPreviewClassMap: Record<ScalarContentPosition, string> = {
+  'top-left': 'items-start justify-start',
+  'top-center': 'items-start justify-center',
+  'top-right': 'items-start justify-end',
+  'middle-left': 'items-center justify-start',
+  center: 'items-center justify-center',
+  'middle-right': 'items-center justify-end',
+  'bottom-left': 'items-end justify-start',
+  'bottom-center': 'items-end justify-center',
+  'bottom-right': 'items-end justify-end',
+};
+
 const buildMappingConfig = (form: WizardForm): MappingConfig => ({
   scalar: {
     value_key: form.scalarValueKey,
@@ -156,6 +208,10 @@ const createFormFromCard = (card: Card): WizardForm => {
     type: card.type,
     size: card.ui_config.size,
     colorTheme: card.ui_config.color_theme,
+    scalarPosition: card.ui_config.scalar_position ?? 'center',
+    scalarTextSize: card.ui_config.scalar_text_size ?? 'medium',
+    statusVerticalPosition: card.ui_config.status_vertical_position ?? 'center',
+    statusTextSize: card.ui_config.status_text_size ?? 'medium',
     scriptPath: card.script_config.path,
     scriptArgsText: formatScriptArgs(card.script_config.args),
     pythonPath: card.script_config.env_path ?? '',
@@ -251,6 +307,10 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
     setTestResult(null);
   }, [
     form.type,
+    form.scalarPosition,
+    form.scalarTextSize,
+    form.statusVerticalPosition,
+    form.statusTextSize,
     form.scriptPath,
     form.scriptArgsText,
     form.pythonPath,
@@ -583,6 +643,10 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           ...editingCard.ui_config,
           size: form.size,
           color_theme: form.colorTheme,
+          scalar_position: form.scalarPosition,
+          scalar_text_size: form.scalarTextSize,
+          status_vertical_position: form.statusVerticalPosition,
+          status_text_size: form.statusTextSize,
         },
         cache_data: runtimePayload
           ? {
@@ -628,6 +692,10 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         size: form.size,
         x: 0,
         y: 0,
+        scalar_position: form.scalarPosition,
+        scalar_text_size: form.scalarTextSize,
+        status_vertical_position: form.statusVerticalPosition,
+        status_text_size: form.statusTextSize,
       },
       status: {
         is_deleted: false,
@@ -802,6 +870,114 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           </div>
         </div>
       </div>
+
+      {form.type === 'scalar' && (
+        <div className="rounded-lg border border-border/70 bg-secondary/20 p-4 space-y-4">
+          <p className="text-sm font-medium">{tr('wizard.displayOptions')}</p>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.scalarContentPosition')}</label>
+            <div className="grid grid-cols-3 gap-2">
+              {scalarPositionOptions.map((option) => {
+                const selected = form.scalarPosition === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    title={tr(option.labelKey)}
+                    aria-label={tr(option.labelKey)}
+                    onClick={() => updateForm('scalarPosition', option.value)}
+                    className={`rounded-md border p-2 transition-colors ${
+                      selected
+                        ? 'border-primary bg-secondary text-primary'
+                        : 'border-input bg-secondary/40 hover:bg-secondary/70 text-muted-foreground'
+                    }`}
+                  >
+                    <div
+                      className={`h-8 w-full rounded border border-current/30 bg-background/40 p-1 flex ${
+                        scalarPositionPreviewClassMap[option.value]
+                      }`}
+                    >
+                      <span className="h-2.5 w-2.5 rounded-full bg-current" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.textSizePreset')}</label>
+            <div className="grid grid-cols-3 gap-2">
+              {textSizeOptions.map((option) => {
+                const selected = form.scalarTextSize === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => updateForm('scalarTextSize', option.value)}
+                    className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                      selected
+                        ? 'border-primary bg-secondary text-primary'
+                        : 'border-input bg-secondary/40 hover:bg-secondary/70'
+                    }`}
+                  >
+                    {tr(option.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {form.type === 'status' && (
+        <div className="rounded-lg border border-border/70 bg-secondary/20 p-4 space-y-4">
+          <p className="text-sm font-medium">{tr('wizard.displayOptions')}</p>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.statusVerticalPosition')}</label>
+            <div className="grid grid-cols-3 gap-2">
+              {verticalPositionOptions.map((option) => {
+                const selected = form.statusVerticalPosition === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => updateForm('statusVerticalPosition', option.value)}
+                    className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                      selected
+                        ? 'border-primary bg-secondary text-primary'
+                        : 'border-input bg-secondary/40 hover:bg-secondary/70'
+                    }`}
+                  >
+                    {tr(option.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tr('wizard.textSizePreset')}</label>
+            <div className="grid grid-cols-3 gap-2">
+              {textSizeOptions.map((option) => {
+                const selected = form.statusTextSize === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => updateForm('statusTextSize', option.value)}
+                    className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                      selected
+                        ? 'border-primary bg-secondary text-primary'
+                        : 'border-input bg-secondary/40 hover:bg-secondary/70'
+                    }`}
+                  >
+                    {tr(option.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <label className="text-sm font-medium">{tr('wizard.colorTheme')}</label>

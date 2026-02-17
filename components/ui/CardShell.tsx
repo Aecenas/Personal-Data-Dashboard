@@ -81,6 +81,11 @@ export const CardShell: React.FC<CardShellProps> = ({
   const isLoading = card.runtimeData?.isLoading;
   const isError = card.runtimeData?.state === 'error';
   const isSeriesCard = card.type === 'series';
+  const isGaugeCard = card.type === 'gauge';
+  const contentSpacingClass = isSeriesCard ? 'px-4 pt-0 pb-1' : isGaugeCard ? 'px-4 pt-0 pb-0' : 'p-4 pt-0 justify-center';
+  const footerClassName = isGaugeCard
+    ? 'h-7 shrink-0 px-4 pt-0.5 flex items-start justify-between text-[11px] text-muted-foreground/90'
+    : 'h-8 shrink-0 px-4 flex items-center justify-between text-[11px] text-muted-foreground/90';
   const thresholdAlertTriggered = Boolean(card.runtimeData?.thresholdAlertTriggered);
   const [thresholdPulseActive, setThresholdPulseActive] = React.useState(false);
   const previousThresholdAlertRef = React.useRef(thresholdAlertTriggered);
@@ -313,9 +318,7 @@ export const CardShell: React.FC<CardShellProps> = ({
       </div>
 
       <div
-        className={`flex-1 min-h-0 flex flex-col pointer-events-none ${
-          isSeriesCard ? 'px-4 pt-0 pb-1' : 'p-4 pt-0 justify-center'
-        }`}
+        className={`flex-1 min-h-0 flex flex-col pointer-events-none ${contentSpacingClass}`}
       >
         {isLoading ? (
           <div className="animate-pulse space-y-2">
@@ -343,7 +346,7 @@ export const CardShell: React.FC<CardShellProps> = ({
       </div>
 
       {!isEditMode && (
-        <div className="h-8 shrink-0 px-4 flex items-center justify-between text-[11px] text-muted-foreground/90">
+        <div className={footerClassName}>
           <div className="inline-flex min-w-0 items-center gap-1">
             {isLoading ? <RefreshCw size={12} className="animate-spin shrink-0" /> : <Clock3 size={12} className="shrink-0" />}
             <span className="truncate">

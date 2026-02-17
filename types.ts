@@ -63,11 +63,44 @@ export interface RefreshConfig {
   timeout_ms: number;
 }
 
+export type ScalarContentPosition =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'middle-left'
+  | 'center'
+  | 'middle-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right';
+
+export type VerticalContentPosition = 'top' | 'center' | 'bottom';
+export type TextSizePreset = 'small' | 'medium' | 'large';
+
+export const SCALAR_CONTENT_POSITIONS: ScalarContentPosition[] = [
+  'top-left',
+  'top-center',
+  'top-right',
+  'middle-left',
+  'center',
+  'middle-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+];
+
+export const VERTICAL_CONTENT_POSITIONS: VerticalContentPosition[] = ['top', 'center', 'bottom'];
+export const TEXT_SIZE_PRESETS: TextSizePreset[] = ['small', 'medium', 'large'];
+
 export interface UIConfig {
   color_theme: 'default' | 'blue' | 'green' | 'red' | 'yellow' | 'purple';
   size: '1x1' | '2x1' | '1x2' | '2x2';
   x: number;
   y: number;
+  scalar_position?: ScalarContentPosition;
+  scalar_text_size?: TextSizePreset;
+  status_vertical_position?: VerticalContentPosition;
+  status_text_size?: TextSizePreset;
 }
 
 export interface LayoutPosition {

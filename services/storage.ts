@@ -20,6 +20,12 @@ import {
   RefreshConfig,
   SectionMarker,
   GroupEntity,
+  ScalarContentPosition,
+  TextSizePreset,
+  VerticalContentPosition,
+  SCALAR_CONTENT_POSITIONS,
+  TEXT_SIZE_PRESETS,
+  VERTICAL_CONTENT_POSITIONS,
 } from '../types';
 import { t } from '../i18n';
 import { ensureCardLayoutScopes } from '../layout';
@@ -78,6 +84,32 @@ const normalizeGroupName = (value: unknown): string => {
   const trimmed = String(value ?? '').trim();
   return trimmed.length > 0 ? trimmed : DEFAULT_GROUP_NAME;
 };
+const normalizeScalarContentPosition = (value: unknown): ScalarContentPosition => {
+  const raw = String(value ?? '').trim();
+  return SCALAR_CONTENT_POSITIONS.includes(raw as ScalarContentPosition)
+    ? (raw as ScalarContentPosition)
+    : 'center';
+};
+const normalizeVerticalContentPosition = (value: unknown): VerticalContentPosition => {
+  const raw = String(value ?? '').trim();
+  return VERTICAL_CONTENT_POSITIONS.includes(raw as VerticalContentPosition)
+    ? (raw as VerticalContentPosition)
+    : 'center';
+};
+const normalizeTextSizePreset = (value: unknown): TextSizePreset => {
+  const raw = String(value ?? '').trim();
+  return TEXT_SIZE_PRESETS.includes(raw as TextSizePreset) ? (raw as TextSizePreset) : 'medium';
+};
+const normalizeUIConfig = (rawUIConfig: any): Card['ui_config'] => ({
+  color_theme: rawUIConfig?.color_theme ?? 'default',
+  size: rawUIConfig?.size ?? '1x1',
+  x: Number(rawUIConfig?.x ?? 0),
+  y: Number(rawUIConfig?.y ?? 0),
+  scalar_position: normalizeScalarContentPosition(rawUIConfig?.scalar_position),
+  scalar_text_size: normalizeTextSizePreset(rawUIConfig?.scalar_text_size),
+  status_vertical_position: normalizeVerticalContentPosition(rawUIConfig?.status_vertical_position),
+  status_text_size: normalizeTextSizePreset(rawUIConfig?.status_text_size),
+});
 const normalizeGroupId = (value: unknown): string | undefined => {
   const raw = String(value ?? '').trim().toUpperCase();
   const matched = GROUP_ID_PATTERN.exec(raw);
@@ -621,12 +653,7 @@ const normalizeCard = (rawCard: any, index: number, historyLimit: number): Card 
       ...defaultRefreshConfig,
       ...(rawCard?.refresh_config ?? {}),
     },
-    ui_config: {
-      color_theme: rawCard?.ui_config?.color_theme ?? 'default',
-      size: rawCard?.ui_config?.size ?? '1x1',
-      x: Number(rawCard?.ui_config?.x ?? 0),
-      y: Number(rawCard?.ui_config?.y ?? 0),
-    },
+    ui_config: normalizeUIConfig(rawCard?.ui_config),
     layout_positions:
       rawCard?.layout_positions && typeof rawCard.layout_positions === 'object'
         ? rawCard.layout_positions
@@ -709,6 +736,7 @@ const sanitizeForSave = (settings: AppSettings): AppSettings => {
         ...defaultRefreshConfig,
         ...normalizedCard.refresh_config,
       },
+      ui_config: normalizeUIConfig(normalizedCard.ui_config),
       alert_config: normalizeAlertConfig(normalizedCard.alert_config),
       alert_state: normalizeAlertState(normalizedCard.alert_state),
       execution_history: executionHistory.size > 0 ? executionHistory : undefined,
