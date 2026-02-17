@@ -10,7 +10,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "sync:readme-version": "node scripts/sync-readme-version.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",

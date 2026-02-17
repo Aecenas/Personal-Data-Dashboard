@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v0.2.0-1f6feb?style=for-the-badge" />
+  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.0-1f6feb?style=for-the-badge" />
   <img alt="Schema" src="https://img.shields.io/badge/schema-v8-f59e0b?style=for-the-badge" />
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?style=for-the-badge&logo=react&logoColor=white" />
