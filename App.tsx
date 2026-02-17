@@ -11,6 +11,8 @@ import { storageService } from './services/storage';
 import { clampDashboardColumns, DEFAULT_DASHBOARD_COLUMNS } from './grid';
 import { BackupSchedule } from './types';
 import { interactionSoundService, isInteractionSoundEvent, InteractionSoundEvent } from './services/interaction-sound';
+import { PanelLeftOpen } from 'lucide-react';
+import { t } from './i18n';
 
 const DEFAULT_WINDOW_WIDTH = 1380;
 const WINDOW_MIN_WIDTH = 730;
@@ -153,6 +155,7 @@ const App: React.FC = () => {
 
   const [isWizardOpen, setWizardOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalRefs = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
@@ -164,6 +167,7 @@ const App: React.FC = () => {
     () => cards.find((card) => card.id === editingCardId) ?? null,
     [cards, editingCardId],
   );
+  const tr = (key: string, params?: Record<string, string | number>) => t(language, key, params);
 
   useEffect(() => {
     initializeStore();
@@ -178,6 +182,10 @@ const App: React.FC = () => {
   useEffect(() => {
     window.document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [currentView]);
 
   useEffect(() => {
     interactionSoundService.setEnabled(interactionSoundEnabled);
@@ -445,14 +453,26 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans antialiased flex">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileSidebarOpen} onMobileOpenChange={setMobileSidebarOpen} />
 
       <main
         className={`
           flex-1 transition-all duration-300 relative h-screen overflow-hidden
-          ${sidebarOpen ? 'ml-64' : 'ml-16'}
+          ml-0 ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'}
         `}
       >
+        {!mobileSidebarOpen && (
+          <button
+            type="button"
+            data-sound="toggle.change"
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label={tr('sidebar.openNavigation')}
+            title={tr('sidebar.openNavigation')}
+            className="lg:hidden fixed left-3 bottom-3 z-30 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-md"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+        )}
         <div className="h-full overflow-hidden">
           {currentView === 'dashboard' && (
             <Dashboard onAddClick={openCreateWizard} onEditCard={openEditWizard} />

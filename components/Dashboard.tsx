@@ -699,6 +699,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                       type="button"
                       className="h-5 w-5 rounded border border-border bg-card text-[10px] leading-none"
                       onClick={() => adjustSection(section, { after_row: section.after_row - 1 })}
+                      aria-label={tr('dashboard.sectionMoveUp')}
+                      title={tr('dashboard.sectionMoveUp')}
                     >
                       ↑
                     </button>
@@ -706,6 +708,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                       type="button"
                       className="h-5 w-5 rounded border border-border bg-card text-[10px] leading-none"
                       onClick={() => adjustSection(section, { after_row: section.after_row + 1 })}
+                      aria-label={tr('dashboard.sectionMoveDown')}
+                      title={tr('dashboard.sectionMoveDown')}
                     >
                       ↓
                     </button>
@@ -713,6 +717,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                       type="button"
                       className="h-5 w-5 rounded border border-border bg-card text-[10px] leading-none"
                       onClick={() => adjustSection(section, { start_col: section.start_col - 1 })}
+                      aria-label={tr('dashboard.sectionMoveLeft')}
+                      title={tr('dashboard.sectionMoveLeft')}
                     >
                       ←
                     </button>
@@ -720,6 +726,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                       type="button"
                       className="h-5 w-5 rounded border border-border bg-card text-[10px] leading-none"
                       onClick={() => adjustSection(section, { start_col: section.start_col + 1 })}
+                      aria-label={tr('dashboard.sectionMoveRight')}
+                      title={tr('dashboard.sectionMoveRight')}
                     >
                       →
                     </button>
@@ -727,6 +735,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                       type="button"
                       className="h-5 w-5 rounded border border-border bg-card text-[10px] leading-none"
                       onClick={() => adjustSection(section, { span_col: section.span_col - 1 })}
+                      aria-label={tr('dashboard.sectionNarrow')}
+                      title={tr('dashboard.sectionNarrow')}
                     >
                       -
                     </button>
@@ -734,6 +744,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                       type="button"
                       className="h-5 w-5 rounded border border-border bg-card text-[10px] leading-none"
                       onClick={() => adjustSection(section, { span_col: section.span_col + 1 })}
+                      aria-label={tr('dashboard.sectionWiden')}
+                      title={tr('dashboard.sectionWiden')}
                     >
                       +
                     </button>
@@ -741,6 +753,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
                       type="button"
                       className="h-5 w-5 rounded border border-red-500/40 bg-red-500/10 text-[10px] leading-none text-red-400"
                       onClick={() => handleDeleteSection(section)}
+                      aria-label={tr('dashboard.sectionDelete')}
+                      title={tr('dashboard.sectionDelete')}
                     >
                       ×
                     </button>
@@ -770,10 +784,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
 
       {copyDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl">
+          <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h3 className="text-base font-semibold text-foreground">{tr('dashboard.copyDialogTitle')}</h3>
-              <Button variant="ghost" size="icon" data-sound="none" onClick={() => closeCopyDialog()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                data-sound="none"
+                aria-label={tr('dashboard.closeDialog')}
+                title={tr('dashboard.closeDialog')}
+                onClick={() => closeCopyDialog()}
+              >
                 <X size={16} />
               </Button>
             </div>
@@ -824,14 +845,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAddClick, onEditCard }) 
 
       {sectionDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl">
+          <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h3 className="text-base font-semibold text-foreground">
                 {sectionDialog.mode === 'create'
                   ? tr('dashboard.sectionDialogCreateTitle')
                   : tr('dashboard.sectionDialogEditTitle')}
               </h3>
-              <Button variant="ghost" size="icon" data-sound="none" onClick={() => closeSectionDialog()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                data-sound="none"
+                aria-label={tr('dashboard.closeDialog')}
+                title={tr('dashboard.closeDialog')}
+                onClick={() => closeSectionDialog()}
+              >
                 <X size={16} />
               </Button>
             </div>

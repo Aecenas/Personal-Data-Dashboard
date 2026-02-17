@@ -307,6 +307,10 @@ export const CardShell: React.FC<CardShellProps> = ({
               variant="ghost"
               size="icon"
               className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label={menuOpen ? tr('cardShell.closeMenu') : tr('cardShell.openMenu')}
+              title={menuOpen ? tr('cardShell.closeMenu') : tr('cardShell.openMenu')}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
               onClick={(event) => {
                 event.stopPropagation();
                 menuTriggerRef.current = event.currentTarget;

@@ -290,6 +290,7 @@ const createFormFromCard = (card: Card): WizardForm => {
 export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editingCard }) => {
   const { cards, groups, addCard, updateCard, refreshCard, createGroup, defaultPythonPath, language } = useStore();
   const tr = (key: string, params?: Record<string, string | number>) => t(language, key, params);
+  const isNativeRuntime = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<WizardForm>(defaultForm);
@@ -873,7 +874,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-medium">{tr('wizard.group')}</label>
           <div className="flex gap-2">
@@ -1152,6 +1153,12 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
 
   const renderStepTwo = () => (
     <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
+      {!isNativeRuntime && (
+        <div className="rounded-md border border-amber-500/35 bg-amber-500/15 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          {tr('exec.validateBrowserOnly')}
+        </div>
+      )}
+
       <div className="space-y-2">
         <label className="text-sm font-medium">{tr('wizard.pythonScriptPath')}</label>
         <div className="flex gap-2">
@@ -1182,7 +1189,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-medium">{tr('wizard.scriptArgs')}</label>
           <input
@@ -1242,7 +1249,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-medium">{tr('wizard.refreshInterval')}</label>
           <input
@@ -1339,7 +1346,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
   const renderStepThree = () => (
     <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
       {form.type === 'scalar' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">{tr('wizard.valueKey')}</label>
             <input
@@ -1376,7 +1383,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       )}
 
       {form.type === 'series' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">{tr('wizard.xAxisKey')}</label>
             <input
@@ -1413,7 +1420,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       )}
 
       {form.type === 'status' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">{tr('wizard.labelKey')}</label>
             <input
@@ -1430,7 +1437,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
               onChange={(event) => updateForm('statusStateKey', event.target.value)}
             />
           </div>
-          <div className="space-y-2 col-span-2">
+          <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium">{tr('wizard.messageKeyOptional')}</label>
             <input
               className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
@@ -1442,7 +1449,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       )}
 
       {form.type === 'gauge' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">{tr('wizard.gaugeMinKey')}</label>
             <input
@@ -1479,7 +1486,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
       )}
 
       {form.type === 'digest' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">{tr('wizard.digestItemsKey')}</label>
             <input
@@ -1496,7 +1503,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
               onChange={(event) => updateForm('digestTitleKey', event.target.value)}
             />
           </div>
-          <div className="space-y-2 col-span-2">
+          <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium">{tr('wizard.digestBodyKey')}</label>
             <input
               className="w-full bg-secondary/50 border border-input rounded-md px-3 py-2 text-sm"
@@ -1531,7 +1538,7 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
           </label>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium">{tr('wizard.alerts.cooldown')}</label>
             <input
@@ -1719,6 +1726,12 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
 
   const renderStepFive = () => (
     <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
+      {!isNativeRuntime && (
+        <div className="rounded-md border border-amber-500/35 bg-amber-500/15 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          {tr('exec.notTauri')}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-4">
         <div>
           <h3 className="text-lg font-medium">{tr('wizard.testAndPreview')}</h3>
@@ -1726,7 +1739,8 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
         <Button
           onClick={runTest}
           data-sound="none"
-          disabled={isTesting || scriptValidation.status !== 'valid' || Boolean(parsedArgs.error)}
+          disabled={!isNativeRuntime || isTesting || scriptValidation.status !== 'valid' || Boolean(parsedArgs.error)}
+          title={!isNativeRuntime ? tr('exec.notTauri') : undefined}
         >
           {isTesting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Play size={16} className="mr-2" />}{' '}
           {isTesting ? tr('wizard.running') : tr('wizard.runTest')}
@@ -1770,7 +1784,11 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-3xl bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="w-full max-w-3xl bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+      >
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div>
             <h2 className="text-xl font-semibold text-foreground">
@@ -1778,7 +1796,14 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
             </h2>
             <p className="text-sm text-muted-foreground">{tr('wizard.subtitle')}</p>
           </div>
-          <Button variant="ghost" size="icon" data-sound="none" onClick={onClose}>
+          <Button
+            variant="ghost"
+            size="icon"
+            data-sound="none"
+            aria-label={tr('wizard.close')}
+            title={tr('wizard.close')}
+            onClick={onClose}
+          >
             <X size={20} />
           </Button>
         </div>
@@ -1881,6 +1906,8 @@ export const CreationWizard: React.FC<CreationWizardProps> = ({ onClose, editing
                 type="button"
                 data-sound="none"
                 onClick={() => closeCreateGroupDialog()}
+                aria-label={tr('wizard.close')}
+                title={tr('wizard.close')}
                 className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 <X size={16} />
